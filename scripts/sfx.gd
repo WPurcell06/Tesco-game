@@ -15,7 +15,12 @@ extends Node
 # See README for the full list of event names the game already fires.
 
 const DIR := "res://audio/"
-const EXTS := ["ogg", "mp3", "wav"]
+# TYPED on purpose. An untyped array yields Variant elements, and a Variant
+# in a ":=" expression gives the compiler nothing to infer from - an
+# untyped EXTS here made `var path := DIR + sound + "." + ext` a parse
+# error, which failed this script, which failed the AUTOLOAD, which made
+# every Sfx call in the game a runtime error.
+const EXTS: Array[String] = ["ogg", "mp3", "wav"]
 
 ## Voices playable at once. Comfortably more than the game can trigger in a
 ## frame (a pickup plus a hazard plus a footfall), so a burst never cuts off
@@ -49,7 +54,7 @@ func _stream(sound: String) -> AudioStream:
 		return _cache[sound]
 	var found: AudioStream = null
 	for ext in EXTS:
-		var path := DIR + sound + "." + ext
+		var path: String = DIR + sound + "." + ext
 		if ResourceLoader.exists(path):
 			found = load(path) as AudioStream
 			break

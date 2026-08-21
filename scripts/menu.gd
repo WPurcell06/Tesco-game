@@ -476,7 +476,7 @@ func _build_controls(root: Control, font: FontFile) -> void:
 		["DOWN DROP THROUGH   -   R RESTART", MUTED],
 		["PRESS 1-5 TO START AN AISLE", ACCENT],
 	]:
-		var l := _label(str(spec[0]), 11, spec[1], font)
+		var l := _label(str(spec[0]), 11, spec[1] as Color, font)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		l.custom_minimum_size = Vector2(420.0, 0.0)
 		col.add_child(l)

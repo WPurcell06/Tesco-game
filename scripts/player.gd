@@ -398,8 +398,9 @@ func _draw_trolley() -> void:
 	# wheels, with a spinning spoke so it reads as rolling even at a standstill
 	var spin := _anim * 2.2
 	var spoke := Vector2(cos(spin), sin(spin)) * TROLLEY_WHEEL_R
+	# float(wx): an inline array literal is untyped, so wx arrives as a Variant
 	for wx in [base_near.x, base_far.x]:
-		var wp := Vector2(wx, base_y + 3.0)
+		var wp := Vector2(float(wx), base_y + 3.0)
 		draw_circle(wp, TROLLEY_WHEEL_R, Color(0.16, 0.16, 0.18))
 		draw_line(wp - spoke, wp + spoke, Color(0.55, 0.58, 0.62), 1.0)
 
