@@ -27,6 +27,32 @@ const EXTS: Array[String] = ["ogg", "mp3", "wav"]
 ## a sound that is still ringing.
 const VOICES := 12
 
+## Per-event level trim, in dB. These are real voice recordings mastered at
+## full scale, but they do not all play equally often: a jump fires every
+## second or so and a level-complete fires once. Without a trim the frequent
+## ones fatigue and bury the music, so the mix is set here rather than by
+## re-exporting audio. Anything not listed plays at 0 dB.
+##
+## item_pickup is deliberately near the top - it is the game's signature sound.
+const LEVELS := {
+	"jump": -8.0,            # most frequent sound in the game, and a long take
+	"drop_through": -6.0,
+	"ui_click": -5.0,
+	"ui_select": -3.0,
+	"item_pickup": -1.0,
+	"hazard_peel": -3.0,
+	"hazard_crate": -3.0,
+	"hazard_soap": -3.0,
+	"hazard_ice": -3.0,
+	"hazard_spill": -3.0,
+	"hazard_knock": -8.0,    # layers under the hazard sound, so it stays behind it
+	"fall_out": -3.0,
+	"player_tumble": -2.0,
+}
+
+## Passed as volume_db to use the LEVELS table instead of an explicit level.
+const AUTO_DB := INF
+
 ## Small random pitch spread on repeated sounds. Without it, footsteps and
 ## coin pickups in quick succession sound like a machine gun rather than a
 ## person; with it each repeat is fractionally different.
@@ -64,14 +90,16 @@ func _stream(sound: String) -> AudioStream:
 
 ## Fires a one-shot. `volume_db` trims a sound that was mastered too hot without
 ## re-exporting it; `jitter` adds the pitch spread described above.
-func play(sound: String, volume_db: float = 0.0, jitter: bool = true) -> void:
+func play(sound: String, volume_db: float = AUTO_DB, jitter: bool = true) -> void:
 	var st := _stream(sound)
 	if st == null:
+		return
+	if _pool.is_empty():
 		return
 	var p := _pool[_next]
 	_next = (_next + 1) % _pool.size()
 	p.stream = st
-	p.volume_db = volume_db
+	p.volume_db = float(LEVELS.get(sound, 0.0)) if volume_db == AUTO_DB else volume_db
 	p.pitch_scale = 1.0
 	if jitter:
 		p.pitch_scale = 1.0 + randf_range(-PITCH_JITTER, PITCH_JITTER)
