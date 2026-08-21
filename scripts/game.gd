@@ -97,6 +97,7 @@ var btn_next: Button
 
 func _ready() -> void:
 	level_index = Session.level_index
+	Sfx.music("music_level")
 	_build_hud()
 	_load_level(0)
 
@@ -106,6 +107,7 @@ func _process(delta: float) -> void:
 		if Input.is_anything_pressed():
 			state = State.PLAYING
 			lbl_hint.visible = false
+			Sfx.play("level_start")
 	elif state == State.PLAYING:
 		elapsed += delta
 
@@ -125,10 +127,15 @@ func _process(delta: float) -> void:
 				_safe_pos = player.global_position
 		# fell through a hole in the aisle floor
 		elif player.global_position.y > LevelData.FLOOR_Y + 420.0:
+			Sfx.play("fall_out")
 			player.global_position = _safe_pos
 			player.velocity = Vector2.ZERO
 			player.stumble()
 			hits += 1
+
+	# the printer motor runs only while paper is actually feeding
+	if state == State.FINISHED and receipt != null and not receipt.is_printing():
+		Sfx.stop_loop("receipt_print")
 
 	if is_instance_valid(player) and is_instance_valid(camera):
 		camera.global_position = player.global_position + Vector2(0.0, -70.0)
@@ -139,6 +146,7 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
+			Sfx.stop_loop("receipt_print")
 			get_tree().change_scene_to_file("res://menu.tscn")
 			return
 		if event.keycode == KEY_R:
@@ -148,6 +156,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		# the rest of it out at once
 		if state == State.FINISHED and receipt != null and receipt.is_printing():
 			receipt.finish_printing()
+			Sfx.stop_loop("receipt_print")
+			Sfx.play("receipt_tear")
 
 
 # ===========================================================================
@@ -159,6 +169,7 @@ func _board_y(index: int) -> float:
 
 
 func _load_level(index: int) -> void:
+	Sfx.stop_loop("receipt_print")
 	var all := LevelData.levels()
 	level_index = clampi(index, 0, all.size() - 1)
 	level = all[level_index]
@@ -481,6 +492,7 @@ func _on_item_touched(body: Node, it: ShelfItem) -> void:
 		return   # the list must be collected in sequence
 
 	it.collected = true
+	Sfx.play("item_pickup")
 	it.visible = false
 	it.set_deferred("monitoring", false)
 	coins += it.coins
@@ -492,6 +504,7 @@ func _on_item_touched(body: Node, it: ShelfItem) -> void:
 		time_credit += bonus
 		coupons_cut.erase(it.id)
 		savings.append({"label": "Coupon " + it.label, "seconds": bonus})
+		Sfx.play("coupon_redeem")
 		_flash("Coupon redeemed!  %s  -%.0fs" % [it.label, bonus])
 
 	list_pos += 1
@@ -508,15 +521,19 @@ func _on_powerup_taken(body: Node2D, pu: PowerUp) -> void:
 	pu.collect()
 	match pu.kind:
 		"boost":
+			Sfx.play("powerup_boost")
 			player.give_boost()
 			_flash(pu.label + "!")
 		"clean":
+			Sfx.play("powerup_clean")
 			player.clear_slow()
 			_flash(pu.label + "!")
 		"coins":
+			Sfx.play("coin_bonus")
 			coins += 3
 			_flash(pu.label + "  +3")
 		"clubcard":
+			Sfx.play("clubcard_pickup")
 			time_credit += CLUBCARD_SECONDS
 			savings.append({"label": pu.label, "seconds": CLUBCARD_SECONDS})
 			_flash("%s  -%.0fs" % [pu.label, CLUBCARD_SECONDS])
@@ -528,6 +545,7 @@ func _on_hazard_touched(body: Node, hz: Hazard) -> void:
 	if not player.can_be_hit():
 		return
 
+	Sfx.play("hazard_" + hz.kind)
 	match hz.effect():
 		"tumble":
 			player.apply_tumble(hz.global_position.x)
@@ -547,6 +565,7 @@ func _on_hazard_touched(body: Node, hz: Hazard) -> void:
 	# Boot it off the shelf. You have paid for this hazard once; it must not be
 	# able to catch you again while you are lying there stunned next to it.
 	hz.knock_away(player.global_position.x)
+	Sfx.play("hazard_knock")
 	hits += 1
 
 
@@ -568,6 +587,7 @@ func _on_coupon_taken(body: Node, cp: Coupon) -> void:
 		_flash("%s already in the trolley - coupon wasted" % cp.item_label)
 		return
 
+	Sfx.play("coupon_cut")
 	coupons_cut[cp.item_id] = cp.seconds
 	_flash("Coupon cut!  %s now worth -%.0fs" % [cp.item_label, cp.seconds])
 	_rebuild_list_rows()
@@ -608,6 +628,8 @@ func _item_def(id: String) -> Dictionary:
 
 func _finish() -> void:
 	state = State.FINISHED
+	Sfx.play("level_complete")
+	Sfx.start_loop("receipt_print", -6.0)
 	if is_instance_valid(player):
 		player.set_physics_process(false)
 
@@ -910,6 +932,7 @@ func _build_end_panel(root: Control) -> void:
 
 
 func _on_save_pressed() -> void:
+	Sfx.play("leaderboard_save")
 	var rows := Leaderboard.submit(name_edit.text, final_score(), str(level["name"]))
 	_refresh_board(rows)
 	name_edit.editable = false

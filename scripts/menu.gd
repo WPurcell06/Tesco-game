@@ -62,6 +62,7 @@ var _layer: CanvasLayer
 
 func _ready() -> void:
 	_levels = LevelData.levels()
+	Sfx.music("music_menu")
 	_build()
 
 
@@ -449,6 +450,7 @@ func _thousands(n: int) -> String:
 
 
 func _set_mode(mode: String) -> void:
+	Sfx.play("ui_click")
 	Session.order_mode = mode
 	for c in get_children():
 		c.queue_free()
@@ -458,6 +460,7 @@ func _set_mode(mode: String) -> void:
 
 
 func _play(index: int) -> void:
+	Sfx.play("ui_select")
 	if _sfx:
 		_sfx.play()
 	Session.level_index = index

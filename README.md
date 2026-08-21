@@ -279,6 +279,51 @@ a detour. Three kinds:
 A slowdown always beats a boost, so a hazard still stings while boosted. Effects
 live in `Game._on_powerup_taken` and are a few lines each to change.
 
+## Sound
+
+Drop files into `audio/` named exactly as the event, `.ogg` (preferred) or
+`.wav`. `scripts/sfx.gd` is an autoload that resolves each event name to
+`res://audio/<name>.<ext>` at runtime; **any event whose file is missing is a
+silent no-op**, so the game runs fine with the folder empty and each sound
+starts working the moment its file appears. No code change needed to add one.
+
+One-shots get a small random pitch spread (±6%) so repeats don't machine-gun.
+
+### Every event the game already fires
+
+| File | Fires when | Wants to sound like |
+|---|---|---|
+| `ui_click` | order-mode toggle pressed | short, dry UI tick |
+| `ui_select` | an aisle is chosen on the home screen | a confirming two-note blip |
+| `level_start` | first key press of a run | trolley rattle / "go" sting |
+| `jump` | shopper jumps | light hop, no vocal |
+| `drop_through` | dropping down through a shelf | soft whoosh downward |
+| `item_pickup` | a shopping-list item is collected | **the till beep.** This is the game's signature sound — it fires most often, so keep it short, clean and satisfying |
+| `coin_bonus` | a coins power-up is taken | coins/change rattle |
+| `clubcard_pickup` | a Clubcard is taken | bright card-swipe / reward chime, clearly "good" |
+| `coupon_cut` | a coupon is cut, before its product | scissors snip through paper |
+| `coupon_redeem` | the couponed product is collected | till beep + a rising "saved you money" flourish; should feel better than a plain pickup |
+| `powerup_boost` | Golden Apple taken | energetic power-up rise |
+| `powerup_clean` | Fresh Wash / mop taken | quick refreshing sweep |
+| `hazard_peel` | banana peel or tomato splat clipped | wet comedy slip |
+| `hazard_crate` | solid angry produce clipped | dull thud / bump |
+| `hazard_spill` | drinks spill clipped | sticky squelch |
+| `hazard_ice` | ice patch clipped | glassy skid |
+| `hazard_soap` | soap monster clipped | bubbly pop / boing |
+| `hazard_knock` | the hazard is booted off the shelf | light whoosh + tumble, plays with the hazard sound above |
+| `player_tumble` | shopper is knocked off their feet | comedic clatter, trolley and all |
+| `fall_out` | shopper falls through the aisle floor | descending "whoops" |
+| `level_complete` | shopping list finished | short triumphant sting |
+| `receipt_print` | **loops** while the receipt is feeding | till printer motor. Must loop seamlessly — it starts on completion and is cut the moment the paper stops or the print is skipped |
+| `receipt_tear` | the print is skipped with a key | paper tear |
+| `leaderboard_save` | a score is saved | small confirming ding |
+| `music_menu` | home screen | loops, `-12 dB` by default |
+| `music_level` | in an aisle | loops, `-12 dB` by default |
+
+Music is one track at a time: asking for the track already playing does
+nothing, so a scene can call `Sfx.music(...)` on every load without restarting
+it. Adjust the level with the second argument, e.g. `Sfx.music("music_level", -9.0)`.
+
 ## Known limits of this MVP
 
 - **The leaderboard is per-browser, not shared.** `user://` in a web build is

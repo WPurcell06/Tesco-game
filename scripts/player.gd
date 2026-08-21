@@ -158,11 +158,13 @@ func _physics_process(delta: float) -> void:
 	if want_drop and grounded and stun <= 0.0 and global_position.y < floor_level - 1.0:
 		# drop through a one-way board. Blocked on the aisle floor, which is
 		# solid ground and has nothing underneath it to fall to.
+		Sfx.play("drop_through")
 		_buffer = 0.0
 		_drop = DROP_TIME
 		collision_mask = 0
 		velocity.y = 70.0
 	elif _buffer > 0.0 and _coyote > 0.0:
+		Sfx.play("jump")
 		_buffer = 0.0
 		_coyote = 0.0
 		velocity.y = JUMP_VELOCITY * (SLOW_JUMP_MULT if slow > 0.0 else 1.0)
@@ -269,6 +271,7 @@ func apply_slip(seconds: float) -> void:
 ## Knocked clean off your feet by a solid obstacle: no control for TUMBLE_TIME,
 ## popped up and pushed away from whatever you clipped, drawn lying down.
 func apply_tumble(from_x: float) -> void:
+	Sfx.play("player_tumble")
 	_grace = HIT_GRACE
 	stun = maxf(stun, TUMBLE_TIME)
 	tumbling = true
