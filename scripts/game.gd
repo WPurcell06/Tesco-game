@@ -334,6 +334,13 @@ func _load_level(index: int) -> void:
 	state = State.READY
 
 	end_panel.visible = false
+	# Saving a score locks the name field so it cannot be submitted twice for
+	# the same run. That lock has to be lifted for the NEXT run, or one save
+	# makes the field read-only for the rest of the session and no later level
+	# can be added to the leaderboard at all.
+	if name_edit != null:
+		name_edit.editable = true
+		name_edit.text = ""
 	lbl_hint.visible = true
 	lbl_hint.text = "Press any key to start   |   %s" % str(level["name"])
 	_refresh_targets()
