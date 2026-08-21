@@ -130,10 +130,22 @@ var _music_player: AudioStreamPlayer = null
 var _fade_in: Tween = null   # kept so a fast second call can cancel it
 
 
+## Deferred by one frame on purpose. A music file is the biggest asset the game
+## touches, and a scene's _ready() is the worst possible place to block on one:
+## if the load is slow, or the importer has not run yet, the whole scene build
+## stalls or dies and the player gets a blank screen. Deferring means the UI is
+## always on screen first and the music arrives when it arrives.
 func music(track: String, volume_db: float = MUSIC_DB) -> void:
 	if track == _music:
 		return
 	_music = track
+	_start_music.call_deferred(track, volume_db)
+
+
+func _start_music(track: String, volume_db: float) -> void:
+	# a newer request landed while this one was waiting - drop this one
+	if track != _music:
+		return
 
 	var outgoing := _music_player
 	var incoming: AudioStreamPlayer = null

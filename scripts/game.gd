@@ -97,9 +97,10 @@ var btn_next: Button
 
 func _ready() -> void:
 	level_index = Session.level_index
-	Sfx.music("music_level")
 	_build_hud()
 	_load_level(0)
+	# after the build on purpose: if audio ever fails, the aisle is already up
+	Sfx.music("music_level")
 
 
 func _process(delta: float) -> void:

@@ -79,8 +79,9 @@ var _rail_y := RAIL_Y      # recomputed in _build from the title's height
 
 func _ready() -> void:
 	_levels = LevelData.levels()
-	Sfx.music("music_menu")
 	_build()
+	# after _build on purpose: if audio ever fails, the menu is already up
+	Sfx.music("music_menu")
 
 
 # ===========================================================================
@@ -147,8 +148,15 @@ func _build() -> void:
 ## that file exists. Returns the y the next block may start at, because the two
 ## title treatments are different heights and everything below has to follow.
 func _build_title(root: Control, font: FontFile) -> float:
+	# load() can return null EVEN WHEN THE FILE EXISTS - the web editor can
+	# miss importing a freshly added asset on its first run. So the logo path
+	# only runs once the texture has actually loaded, and a failed load falls
+	# back to the drawn wordmark instead of crashing the whole build (calling
+	# get_width() on the null was exactly how the menu died to a blank wall).
+	var tex: Texture2D = null
 	if ResourceLoader.exists("res://ui/logo.png"):
-		var tex: Texture2D = load("res://ui/logo.png")
+		tex = load("res://ui/logo.png") as Texture2D
+	if tex != null:
 		# size off the ART's own aspect rather than a hardcoded box, so dropping
 		# in a differently-shaped logo never stretches it
 		var ar := float(tex.get_width()) / maxf(float(tex.get_height()), 1.0)
