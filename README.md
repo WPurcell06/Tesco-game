@@ -29,6 +29,12 @@ the sprite: edge grabs and gap jumps feel fairer that way.
 To swap the art, keep the same 32x32 frame grid and the body inside x 3..19,
 y 5..25, or adjust `BODY_LEFT` / `BODY_RIGHT` / `BODY_BOTTOM` in `player.gd`.
 
+It's called Trolley Dash, so the shopper pushes one: a wireframe trolley drawn
+procedurally in `Player._draw_trolley()` (no art asset — same lines/circles
+technique the art-less hazards and power-ups use), ahead of them in whichever
+direction they're facing, wheels spinning as they move. Geometry constants are
+at the top of `player.gd` next to the rest of the shopper's art tuning.
+
 ## The top shelf is sealed
 
 Running along the roof skipped every hazard in the aisle, so the top board is no
@@ -136,7 +142,7 @@ per-browser and vanishes if site data is cleared.
 
 | # | Aisle | Collectibles | Hazard | What it does |
 |---|---|---|---|---|
-| 1 | Produce Pursuit | fruit & veg | banana peel | 1.0s stun, you skid with no controls |
+| 1 | Produce Pursuit | fruit & veg (real art, see below) | angry produce | mix of 1.0s stun (flat sprites) and slowdown (square sprites) |
 | 2 | Snack Attack | chocolate & candy | fizzy drink spill | slowdown, still steerable |
 | 3 | Frozen Frenzy | poultry, ice cream, ice pops | ice patch | 3.0s slip: faster but barely steerable |
 | 4 | Health & Beauty | brushes, lipstick, makeup | spilled soap | 1.8s trapped in a bubble, pinned |
@@ -179,6 +185,21 @@ Two Kenney packs are wired in (both CC0):
 | `ui/font/KenneyFutureNarrow.ttf` | every label in the game |
 | `ui/click.ogg` | button press |
 
+A third, non-Kenney sheet covers Produce Pursuit's own art:
+
+| Where | Asset |
+|---|---|
+| `sprites/grocery.png` | hand-painted produce icons, repacked into a uniform 7-col x 4-row, 96x96-per-cell grid |
+
+The source art was an irregular contact sheet (rows of 4-7 icons, not a clean
+grid), so each icon was cropped to its own bounding box and recomposited onto
+this uniform grid — that's what makes it lift-and-loop through
+`Sprites.region_of` like every other sheet. Named indices for every icon live
+in `scripts/grocery_theme.gd` (`GroceryTheme.APPLE_RED`, `.CARROT_ANGRY`,
+`.BROCCOLI_KING`, and so on) — reference those from `level_data.gd` rather than
+raw index numbers. Three families: plain produce (shopping-list items), angry
+produce (hazards), and sparkly produce plus a can of beans (power-ups).
+
 **The world tile is 54px, which is exactly 3x the 18px art.** That matters: a
 non-integer scale makes some source pixels 3 screen pixels wide and others 4,
 which is very visible on pixel art. `default_texture_filter` is set to Nearest
@@ -196,6 +217,16 @@ real shelf does, leaving a 2-tile opening for the player.
 each aisle's best time beside it. Keys 1-5 jump straight into an aisle. In game,
 the HUD shows `AISLE n/5`, Escape returns home, and the end panel has Home /
 Retry / Next aisle.
+
+Themed around Tesco's own blue/red rather than a generic dark panel: a blue
+backdrop, a red header band behind the title, and aisle buttons alternating
+blue/red (grey stays on aisle 4, kept for contrast reasons — see the comment
+in `menu.gd`). The whole menu is built under a `CanvasLayer` — Controls need
+a `Control`/`CanvasLayer` ancestor to anchor against the real viewport rect;
+parented straight onto the scene's `Node2D` root, `PRESET_FULL_RECT` has
+nothing to size against and the layout collapses to its content's natural
+size instead of filling and centering. `game.gd`'s HUD already did this
+correctly — `menu.gd` now matches it.
 
 ## Sprites
 
@@ -257,6 +288,11 @@ live in `Game._on_powerup_taken` and are a few lines each to change.
 - Hazards slow you rather than killing you. Swapping to lives/restart is a
   change in `_on_hazard_touched` only.
 - No audio, no menus, no per-level unlock gating.
+- `level-editor.html` (ships separately, not in this checkout) doesn't know
+  about `grocery.png` yet — its Sprites tab and embedded level set were built
+  against `industrial.png` only. If you open Produce Pursuit there, re-sync
+  its sheet config and level JSON with `scripts/level_data.gd` and
+  `scripts/grocery_theme.gd` first, or it'll overwrite the new art references.
 - One-way platform drop-through briefly disables the player's collision mask,
   so you can drop through the aisle floor's neighbours but not the floor itself.
 

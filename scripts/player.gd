@@ -30,6 +30,17 @@ const BODY_BOTTOM   := 25
 const RUN_FPS       := 9.0
 const DROP_TIME     := 0.22     # how long collision is disabled when dropping through
 
+# --- the trolley (this is Trolley Dash - the shopper needed one) ------------
+# Drawn procedurally, same technique as the hazards/power-ups, rather than as
+# a sprite: it's just lines and circles, and it needs to sit correctly on
+# either side of the shopper depending on which way they're facing.
+const TROLLEY_W        := 30.0    # basket depth in the facing direction
+const TROLLEY_H         := 28.0    # rim to base
+const TROLLEY_GAP       := 6.0     # clearance between the body and the near edge
+const TROLLEY_WHEEL_R   := 4.0
+const TROLLEY_CAGE      := Color(0.74, 0.80, 0.87)     # brushed-steel mesh
+const TROLLEY_HANDLE    := Color(0.902, 0.114, 0.145)  # Tesco red grip
+
 # --- hazard effect: you get bogged down rather than time-penalised ---
 const SLOW_TIME       := 2.8    # seconds of sludge after a hit
 const SLOW_SPEED_MULT := 0.35   # top speed while slowed
@@ -250,6 +261,8 @@ func clear_slow() -> void:
 
 
 func _draw() -> void:
+	_draw_trolley()
+
 	var tint := Color(1, 1, 1)
 	if stun > 0.0:
 		tint = Color(0.80, 0.68, 1.00) if bubbled else Color(1.00, 0.94, 0.55)
@@ -290,6 +303,41 @@ func _draw() -> void:
 	draw_texture_rect_region(_tex, dest, src, tint)
 	if facing < 0.0:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## A wireframe shopping trolley, pushed ahead of the shopper in whichever
+## direction they're facing. No art asset for this exists, so it's drawn the
+## same way the hazards without sprites are: lines, arcs and circles.
+func _draw_trolley() -> void:
+	var dir := facing if facing != 0.0 else 1.0
+	var near_x := dir * (BODY_W * 0.5 + TROLLEY_GAP)
+	var far_x := near_x + dir * TROLLEY_W
+	var rim_y := -TROLLEY_H - 4.0    # basket rim, roughly waist height
+	var base_y := -6.0               # basket floor, just above the wheels
+
+	# the cage is a trapezoid, narrower at the base than the rim like a real
+	# shopping trolley, not a plain box
+	var rim_near := Vector2(near_x, rim_y)
+	var rim_far := Vector2(far_x, rim_y)
+	var base_far := Vector2(far_x - dir * 4.0, base_y)
+	var base_near := Vector2(near_x + dir * 4.0, base_y)
+	draw_polyline(PackedVector2Array([rim_near, rim_far, base_far, base_near, rim_near]),
+		TROLLEY_CAGE, 2.0, true)
+	for f in [0.35, 0.68]:
+		draw_line(rim_near.lerp(base_near, f), rim_far.lerp(base_far, f), TROLLEY_CAGE, 1.5)
+
+	# wheels, with a spinning spoke so it reads as rolling even at a standstill
+	var spin := _anim * 2.2
+	var spoke := Vector2(cos(spin), sin(spin)) * TROLLEY_WHEEL_R
+	for wx in [base_near.x, base_far.x]:
+		var wp := Vector2(wx, base_y + 3.0)
+		draw_circle(wp, TROLLEY_WHEEL_R, Color(0.16, 0.16, 0.18))
+		draw_line(wp - spoke, wp + spoke, Color(0.55, 0.58, 0.62), 1.0)
+
+	# handle, rising back toward the shopper's hands
+	var grip := rim_near + Vector2(-dir * 2.0, -14.0)
+	draw_line(rim_near, grip, TROLLEY_HANDLE, 2.5)
+	draw_line(grip, grip - Vector2(dir * 8.0, 0.0), TROLLEY_HANDLE, 2.5)
 
 
 ## Used only if sprites/player.png is missing, so the game still runs.

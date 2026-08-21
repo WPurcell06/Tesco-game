@@ -11,3 +11,8 @@ Anything without a sprite falls back to the procedural shapes, so the game runs
 fine with this folder empty.
 
 Kenney's packs are all CC0 (no attribution required, though he deserves it).
+
+`grocery.png` is the odd one out: hand-painted produce icons (not Kenney),
+repacked from an irregular contact sheet into a uniform 7x4 grid of 96x96
+cells so it slices the same way as everything else. Named indices for every
+icon are in `scripts/grocery_theme.gd` — use those rather than raw numbers.

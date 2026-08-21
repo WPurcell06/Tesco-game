@@ -3,8 +3,8 @@ extends RefCounted
 
 # ---------------------------------------------------------------------------
 # TILE GRID
-#   TILE            one grid square, 60x60
-#   a shelf row     3 tiles tall (SHELF_SPACING = 180 = 3 * TILE)
+#   TILE            one grid square, 54x54
+#   a shelf row     3 tiles tall (SHELF_SPACING = 162 = 3 * TILE)
 #   "col"           horizontal tile index, 0 = leftmost
 #   "shelf"         0 = standing on the aisle floor, counting upwards
 # ---------------------------------------------------------------------------
@@ -24,6 +24,7 @@ const DEFAULT_COLS  := 34
 static func sheets() -> Dictionary:
 	return {
 		"industrial.png": {"tile_w": 18, "tile_h": 18, "margin": 0, "spacing": 0, "cols": 16},
+		"grocery.png": {"tile_w": 96, "tile_h": 96, "margin": 0, "spacing": 0, "cols": 7},
 	}
 
 
@@ -55,31 +56,50 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"items": [
-				{"id": "banana", "label": "Bananas", "coins": 1, "type": "banana", "shelf": 0, "col": 6},
-				{"id": "apples", "label": "Apples", "coins": 1, "type": "apple", "shelf": 1, "col": 15},
-				{"id": "carrots", "label": "Carrots", "coins": 2, "type": "carrot", "shelf": 2, "col": 9},
-				{"id": "broccoli", "label": "Broccoli", "coins": 2, "type": "broccoli", "shelf": 1, "col": 26},
-				{"id": "tomatoes", "label": "Tomatoes", "coins": 3, "type": "tomato", "shelf": 3, "col": 19},
-				{"id": "potatoes", "label": "Potatoes", "coins": 1, "type": "potato", "shelf": 0, "col": 28},
-				{"id": "lemons", "label": "Lemons", "coins": 3, "type": "lemon", "shelf": 2, "col": 30},
-				{"id": "grapes", "label": "Grapes", "coins": 4, "type": "grapes", "shelf": 3, "col": 31},
+				{"id": "apples", "label": "Apples", "coins": 1, "type": "apple", "shelf": 1, "col": 15,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_RED},
+				{"id": "strawberries", "label": "Strawberries", "coins": 1, "type": "strawberry", "shelf": 0, "col": 6,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.STRAWBERRY},
+				{"id": "carrots", "label": "Carrots", "coins": 2, "type": "carrot", "shelf": 2, "col": 9,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.CARROT},
+				{"id": "broccoli", "label": "Broccoli", "coins": 2, "type": "broccoli", "shelf": 1, "col": 26,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BROCCOLI},
+				{"id": "tomatoes", "label": "Tomatoes", "coins": 3, "type": "tomato", "shelf": 3, "col": 19,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.TOMATO},
+				{"id": "cabbage", "label": "Cabbage", "coins": 1, "type": "cabbage", "shelf": 0, "col": 28,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.CABBAGE},
+				{"id": "oranges", "label": "Oranges", "coins": 3, "type": "orange", "shelf": 2, "col": 30,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.ORANGE},
+				{"id": "grapes", "label": "Grapes", "coins": 4, "type": "grapes", "shelf": 3, "col": 31,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.GRAPES},
 			],
+			# A mix of "peel" (flat sprite, low box, stun) and "crate" (square
+			# sprite, square box, slowdown) so twelve hazards don't read as the
+			# same banana repeated twelve times, and no icon gets squashed into
+			# a hitbox shaped wrong for it - see GroceryTheme's hazard comments.
 			"hazards": [
-				{"type": "peel", "shelf": 0, "col": 7},
-				{"type": "peel", "shelf": 0, "col": 12},
-				{"type": "peel", "shelf": 0, "col": 31},
-				{"type": "peel", "shelf": 1, "col": 8},
-				{"type": "peel", "shelf": 1, "col": 18},
-				{"type": "peel", "shelf": 1, "col": 23},
-				{"type": "peel", "shelf": 2, "col": 11},
-				{"type": "peel", "shelf": 2, "col": 19},
-				{"type": "peel", "shelf": 2, "col": 31},
-				{"type": "peel", "shelf": 3, "col": 17},
-				{"type": "peel", "shelf": 3, "col": 24},
-				{"type": "peel", "shelf": 3, "col": 29},
+				{"type": "peel", "shelf": 0, "col": 7, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.PEEL_ANGRY},
+				{"type": "crate", "shelf": 0, "col": 12, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_ANGRY},
+				{"type": "crate", "shelf": 0, "col": 31, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.PEAR_ANGRY},
+				{"type": "crate", "shelf": 1, "col": 8, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BROCCOLI_ANGRY},
+				{"type": "crate", "shelf": 1, "col": 18, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.CARROT_ANGRY},
+				{"type": "crate", "shelf": 1, "col": 23, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.CABBAGE_ANGRY},
+				{"type": "crate", "shelf": 2, "col": 11, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.CORN_ANGRY},
+				{"type": "peel", "shelf": 2, "col": 19, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.TOMATO_ANGRY},
+				{"type": "crate", "shelf": 2, "col": 31, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.ORANGE_ANGRY},
+				{"type": "crate", "shelf": 3, "col": 17, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.STRAWBERRY_ANGRY},
+				{"type": "peel", "shelf": 3, "col": 24, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.PEEL_ANGRY},
+				{"type": "crate", "shelf": 3, "col": 29, "sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_ANGRY},
 			],
 			"powerups": [
-				{"id": "pu1", "kind": "boost", "label": "Energy Drink", "shelf": 2, "col": 4},
+				{"id": "pu1", "kind": "boost", "label": "Golden Apple", "shelf": 2, "col": 4,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_GOLDEN},
+				{"id": "pu2", "kind": "clean", "label": "Fresh Wash", "shelf": 1, "col": 2,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.PEAR_FROZEN},
+				{"id": "pu3", "kind": "coins", "label": "Crown Broccoli", "shelf": 3, "col": 4,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BROCCOLI_KING},
+				{"id": "pu4", "kind": "coins", "label": "Baked Beans", "shelf": 0, "col": 20,
+					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BEANS_CAN},
 			],
 			"gaps": [
 				{"shelf": 2, "col": 19},
@@ -87,7 +107,7 @@ static func levels() -> Array:
 				{"shelf": 3, "col": 25},
 				{"shelf": 3, "col": 26},
 			],
-			"list": ["banana", "apples", "carrots", "broccoli", "tomatoes", "potatoes"],
+			"list": ["strawberries", "apples", "carrots", "broccoli", "tomatoes", "cabbage"],
 		},
 		{
 			"name": "2 - Snack Attack",
