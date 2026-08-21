@@ -4,7 +4,7 @@ extends Node
 #
 #   Sfx.play("coupon_cut")
 #
-# looks for res://audio/coupon_cut.ogg (then .wav) and plays it. If that file
+# looks for res://audio/coupon_cut.ogg (then .mp3, .wav) and plays it. If that file
 # does not exist the call is a silent no-op - same rule the rest of the project
 # follows for art, so the game runs correctly with an empty audio folder and
 # every sound starts working the moment its file is dropped in. No code change
@@ -15,7 +15,7 @@ extends Node
 # See README for the full list of event names the game already fires.
 
 const DIR := "res://audio/"
-const EXTS := ["ogg", "wav"]
+const EXTS := ["ogg", "mp3", "wav"]
 
 ## Voices playable at once. Comfortably more than the game can trigger in a
 ## frame (a pickup plus a hazard plus a footfall), so a burst never cuts off
@@ -87,14 +87,23 @@ func start_loop(sound: String, volume_db: float = 0.0) -> void:
 	p.volume_db = volume_db
 	p.bus = "Master"
 	add_child(p)
-	# loop the stream itself where the format supports being told to
+	_set_looping(st)
+	p.play()
+	_loops[sound] = p
+
+
+## Tells the stream itself to loop. Doing it on the RESOURCE rather than
+## restarting the player on `finished` matters: a restart-on-finished leaves an
+## audible gap at the seam, and the callback that used to do it was a one-line
+## lambda containing an `if`, which GDScript will not parse - that took the
+## whole autoload down with it, and every scene that touches Sfx along with it.
+func _set_looping(st: AudioStream) -> void:
 	if st is AudioStreamWAV:
 		(st as AudioStreamWAV).loop_mode = AudioStreamWAV.LOOP_FORWARD
 	elif st is AudioStreamOggVorbis:
 		(st as AudioStreamOggVorbis).loop = true
-	p.finished.connect(func(): if is_instance_valid(p): p.play())
-	p.play()
-	_loops[sound] = p
+	elif st is AudioStreamMP3:
+		(st as AudioStreamMP3).loop = true
 
 
 func stop_loop(sound: String) -> void:
@@ -107,18 +116,55 @@ func stop_loop(sound: String) -> void:
 	_loops.erase(sound)
 
 
-## Background music. One track at a time; asking for the track already playing
-## does nothing, so a scene can call this on every load without restarting it.
-var _music := ""
+## Background music, crossfaded. Asking for the track already playing does
+## nothing, so a scene can call this on every load without restarting it - and
+## because Sfx is an autoload it survives the scene change, so the menu track
+## and the aisle track fade across each other rather than cutting.
+const MUSIC_DB    := -12.0
+const MUSIC_FADE  := 1.6     # seconds. Long enough to read as a mix rather
+                             # than a cut, short enough not to trail into play.
+const MUSIC_QUIET := -40.0   # effectively silent, without hitting the -80 cliff
 
-func music(track: String, volume_db: float = -12.0) -> void:
+var _music := ""
+var _music_player: AudioStreamPlayer = null
+var _fade_in: Tween = null   # kept so a fast second call can cancel it
+
+
+func music(track: String, volume_db: float = MUSIC_DB) -> void:
 	if track == _music:
 		return
-	if not _music.is_empty():
-		stop_loop(_music)
 	_music = track
+
+	var outgoing := _music_player
+	var incoming: AudioStreamPlayer = null
+
 	if not track.is_empty():
-		start_loop(track, volume_db)
+		var st := _stream(track)
+		if st != null:
+			_set_looping(st)
+			incoming = AudioStreamPlayer.new()
+			incoming.stream = st
+			incoming.bus = "Master"
+			incoming.volume_db = MUSIC_QUIET   # starts silent, fades up
+			add_child(incoming)
+			incoming.play()
+	_music_player = incoming
+
+	# If the previous track is still fading IN when it gets replaced, that tween
+	# is still driving its volume - two tweens on one property fight and the
+	# track audibly stutters. Cancel it before handing the player to the fade out.
+	if _fade_in != null and _fade_in.is_valid():
+		_fade_in.kill()
+	_fade_in = null
+
+	# two independent tweens, so the two halves genuinely overlap
+	if outgoing != null and is_instance_valid(outgoing):
+		var fade_out := create_tween()
+		fade_out.tween_property(outgoing, "volume_db", MUSIC_QUIET, MUSIC_FADE)
+		fade_out.tween_callback(outgoing.queue_free)
+	if incoming != null:
+		_fade_in = create_tween()
+		_fade_in.tween_property(incoming, "volume_db", volume_db, MUSIC_FADE)
 
 
 func stop_music() -> void:
