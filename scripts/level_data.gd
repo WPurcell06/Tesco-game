@@ -25,6 +25,10 @@ static func sheets() -> Dictionary:
 	return {
 		"industrial.png": {"tile_w": 18, "tile_h": 18, "margin": 0, "spacing": 0, "cols": 16},
 		"grocery.png": {"tile_w": 96, "tile_h": 96, "margin": 0, "spacing": 0, "cols": 7},
+		# geometry here MUST match the header comment in aisle_sprites.gd
+		"treats.png": {"tile_w": 32, "tile_h": 32, "margin": 0, "spacing": 0, "cols": 6},
+		"poultry.png": {"tile_w": 32, "tile_h": 32, "margin": 0, "spacing": 0, "cols": 2},
+		"beauty.png": {"tile_w": 120, "tile_h": 120, "margin": 0, "spacing": 0, "cols": 3},
 	}
 
 
@@ -55,6 +59,20 @@ static func sheets() -> Dictionary:
 #                 is the mechanic.
 # powerups        "kind" is boost | clean | coins | clubcard, where clubcard
 #                 credits CLUBCARD_SECONDS straight off the final time.
+#
+# theme           Per-aisle colouring, so the five aisles do not all read as
+#                 the same grey shelf. Keys, all optional - anything missing
+#                 falls back to the neutral defaults in Game._draw:
+#                   interior  the wall behind the whole shelf unit
+#                   carcass   the shelf unit's own body
+#                   back_a    shelf back panel, even rows
+#                   back_b    shelf back panel, odd rows
+#                   floor     the aisle floor
+#                   sign      the hanging aisle sign, matching the home screen
+#                 Keep these DESATURATED. They sit behind the products, and
+#                 the products are what the player is hunting for - a strongly
+#                 coloured back panel makes the shopping list harder to spot,
+#                 which is the one thing this level must not do.
 # ---------------------------------------------------------------------------
 
 static func levels() -> Array:
@@ -66,6 +84,15 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"par": 75.0,
+			# greengrocer: everything leans very slightly green
+			"theme": {
+				"interior": Color(0.130, 0.170, 0.155),
+				"carcass": Color(0.220, 0.280, 0.255),
+				"back_a": Color(0.270, 0.330, 0.300),
+				"back_b": Color(0.240, 0.300, 0.270),
+				"floor": Color(0.170, 0.210, 0.195),
+				"sign": Color(0.227, 0.655, 0.341),
+			},
 			"items": [
 				{"id": "apples", "label": "Apples", "coins": 1, "type": "apple", "shelf": 1, "col": 15,
 					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_RED},
@@ -137,36 +164,63 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"par": 85.0,
+			# confectionery: warm amber, like the sweets aisle lighting
+			"theme": {
+				"interior": Color(0.180, 0.150, 0.130),
+				"carcass": Color(0.300, 0.250, 0.200),
+				"back_a": Color(0.350, 0.290, 0.230),
+				"back_b": Color(0.310, 0.260, 0.210),
+				"floor": Color(0.210, 0.180, 0.150),
+				"sign": Color(0.949, 0.718, 0.020),
+			},
+			# Six items, one per treats.png sprite. Renamed off the art rather
+			# than the art forced onto old names - a "Choc Bar" with a donut
+			# sprite is worse than an honestly-labelled donut.
 			"items": [
-				{"id": "chocbar", "label": "Choc Bar", "coins": 1, "type": "chocolate", "shelf": 0, "col": 7},
-				{"id": "gummies", "label": "Gummy Bears", "coins": 2, "type": "gummy", "shelf": 1, "col": 18},
-				{"id": "truffles", "label": "Truffles", "coins": 3, "type": "chocolate", "shelf": 2, "col": 12},
-				{"id": "lollipop", "label": "Lollipop", "coins": 2, "type": "lollipop", "shelf": 3, "col": 24},
-				{"id": "jellybeans", "label": "Jelly Beans", "coins": 3, "type": "candy", "shelf": 1, "col": 31},
-				{"id": "marshmallows", "label": "Marshmallows", "coins": 2, "type": "marshmallow", "shelf": 4, "col": 16},
-				{"id": "toffees", "label": "Toffees", "coins": 4, "type": "candy", "shelf": 4, "col": 33},
-				{"id": "mints", "label": "Mints", "coins": 1, "type": "candy", "shelf": 0, "col": 29},
+				{"id": "cake", "label": "Cake Slice", "coins": 2, "type": "cake", "shelf": 0, "col": 7,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CAKE},
+				{"id": "donut", "label": "Donut", "coins": 1, "type": "donut", "shelf": 1, "col": 18,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.DONUT},
+				{"id": "lollipop", "label": "Lollipop", "coins": 2, "type": "lollipop", "shelf": 3, "col": 24,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.LOLLIPOP},
+				{"id": "cone", "label": "Ice Cream", "coins": 3, "type": "icecream", "shelf": 2, "col": 12,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CONE_PLAIN},
+				{"id": "choccone", "label": "Choc Cone", "coins": 3, "type": "icecream", "shelf": 1, "col": 31,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CONE_CHOC},
+				{"id": "icelolly", "label": "Ice Lolly", "coins": 2, "type": "icepop", "shelf": 4, "col": 16,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.ICE_LOLLY},
+				{"id": "toffees", "label": "Toffees", "coins": 4, "type": "candy", "shelf": 4, "col": 33,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CAKE},
+				{"id": "mints", "label": "Mints", "coins": 1, "type": "candy", "shelf": 0, "col": 29,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.DONUT},
 			],
+			# "crate" not "spill": the angry-snack art is square, and the flat
+			# spill box would squash it. Cycled so no two neighbours match.
 			"hazards": [
-				{"type": "spill", "shelf": 0, "col": 19},
-				{"type": "spill", "shelf": 0, "col": 22},
-				{"type": "spill", "shelf": 0, "col": 25},
-				{"type": "spill", "shelf": 1, "col": 10},
-				{"type": "spill", "shelf": 1, "col": 13},
-				{"type": "spill", "shelf": 1, "col": 34},
-				{"type": "spill", "shelf": 2, "col": 10},
-				{"type": "spill", "shelf": 2, "col": 14},
-				{"type": "spill", "shelf": 2, "col": 21},
-				{"type": "spill", "shelf": 3, "col": 10},
-				{"type": "spill", "shelf": 3, "col": 19},
-				{"type": "spill", "shelf": 3, "col": 26},
-				{"type": "spill", "shelf": 4, "col": 7},
-				{"type": "spill", "shelf": 4, "col": 13},
-				{"type": "spill", "shelf": 4, "col": 22},
+				{"type": "crate", "shelf": 0, "col": 19, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_MARSHMALLOW},
+				{"type": "crate", "shelf": 0, "col": 22, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_DONUT},
+				{"type": "crate", "shelf": 0, "col": 25, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_GUMMY},
+				{"type": "crate", "shelf": 1, "col": 10, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CONE},
+				{"type": "crate", "shelf": 1, "col": 13, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CANDY},
+				{"type": "crate", "shelf": 1, "col": 34, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_ICE_LOLLY},
+				{"type": "crate", "shelf": 2, "col": 10, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_MARSHMALLOW},
+				{"type": "crate", "shelf": 2, "col": 14, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_DONUT},
+				{"type": "crate", "shelf": 2, "col": 21, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_GUMMY},
+				{"type": "crate", "shelf": 3, "col": 10, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CONE},
+				{"type": "crate", "shelf": 3, "col": 19, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CANDY},
+				{"type": "crate", "shelf": 3, "col": 26, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_ICE_LOLLY},
+				{"type": "crate", "shelf": 4, "col": 7, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_MARSHMALLOW},
+				{"type": "crate", "shelf": 4, "col": 13, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_DONUT},
+				{"type": "crate", "shelf": 4, "col": 22, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_GUMMY},
 			],
 			"powerups": [
 				{"id": "pu2", "kind": "clean", "label": "Mop", "shelf": 1, "col": 5},
 				{"id": "pu3", "kind": "boost", "label": "Energy Drink", "shelf": 3, "col": 35},
+				{"id": "pu2c", "kind": "clubcard", "label": "Clubcard", "shelf": 2, "col": 33},
+			],
+			"coupons": [
+				{"item": "cake", "shelf": 4, "col": 9, "seconds": 5.0},
+				{"item": "lollipop", "shelf": 0, "col": 34, "seconds": 5.0},
 			],
 			"gaps": [
 				{"shelf": 1, "col": 22},
@@ -178,7 +232,7 @@ static func levels() -> Array:
 				{"shelf": 4, "col": 25},
 				{"shelf": 4, "col": 26},
 			],
-			"list": ["chocbar", "gummies", "truffles", "lollipop", "jellybeans", "marshmallows"],
+			"list": ["cake", "donut", "lollipop", "cone", "choccone", "icelolly"],
 		},
 		{
 			"name": "3 - Frozen Frenzy",
@@ -187,35 +241,57 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"par": 95.0,
+			# freezer: cold blue, and noticeably darker than the other aisles
+			"theme": {
+				"interior": Color(0.110, 0.160, 0.220),
+				"carcass": Color(0.190, 0.270, 0.350),
+				"back_a": Color(0.240, 0.330, 0.420),
+				"back_b": Color(0.210, 0.300, 0.380),
+				"floor": Color(0.140, 0.200, 0.270),
+				"sign": Color(0.122, 0.435, 0.816),
+			},
 			"items": [
-				{"id": "chicken", "label": "Chicken", "coins": 2, "type": "poultry", "shelf": 0, "col": 8},
-				{"id": "turkey", "label": "Turkey Crown", "coins": 3, "type": "poultry", "shelf": 1, "col": 21},
-				{"id": "vanillatub", "label": "Vanilla Tub", "coins": 2, "type": "icecream", "shelf": 2, "col": 13},
-				{"id": "chocice", "label": "Choc Ice", "coins": 3, "type": "icecream", "shelf": 3, "col": 27},
-				{"id": "icepop", "label": "Ice Pops", "coins": 1, "type": "icepop", "shelf": 1, "col": 33},
-				{"id": "sorbet", "label": "Sorbet", "coins": 4, "type": "icecream", "shelf": 4, "col": 18},
-				{"id": "nuggets", "label": "Nuggets", "coins": 2, "type": "poultry", "shelf": 4, "col": 36},
-				{"id": "gateau", "label": "Ice Gateau", "coins": 5, "type": "icecream", "shelf": 5, "col": 30},
+				{"id": "chicken", "label": "Chicken", "coins": 2, "type": "poultry", "shelf": 0, "col": 8,
+					"sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ROAST_CHICKEN},
+				{"id": "drumsticks", "label": "Drumsticks", "coins": 3, "type": "poultry", "shelf": 1, "col": 21,
+					"sheet": AisleSprites.POULTRY, "sprite": AisleSprites.DRUMSTICK},
+				{"id": "vanillatub", "label": "Vanilla Cone", "coins": 2, "type": "icecream", "shelf": 2, "col": 13,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CONE_PLAIN},
+				{"id": "chocice", "label": "Choc Cone", "coins": 3, "type": "icecream", "shelf": 3, "col": 27,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CONE_CHOC},
+				{"id": "icepop", "label": "Ice Lolly", "coins": 1, "type": "icepop", "shelf": 1, "col": 33,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.ICE_LOLLY},
+				{"id": "sorbet", "label": "Sorbet", "coins": 4, "type": "icecream", "shelf": 4, "col": 18,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CONE_PLAIN},
+				{"id": "nuggets", "label": "Nuggets", "coins": 2, "type": "poultry", "shelf": 4, "col": 36,
+					"sheet": AisleSprites.POULTRY, "sprite": AisleSprites.DRUMSTICK},
+				{"id": "gateau", "label": "Ice Gateau", "coins": 5, "type": "icecream", "shelf": 5, "col": 30,
+					"sheet": AisleSprites.TREATS, "sprite": AisleSprites.CAKE},
 			],
+			# Two hazard families on purpose. Bare "ice" keeps its procedural
+			# animated patch - it reads as a floor surface you slide across,
+			# which is this aisle's whole identity and no sprite improves it.
+			# The angry poultry are solid objects you hop instead, so the two
+			# demand different things of the player.
 			"hazards": [
 				{"type": "ice", "shelf": 0, "col": 20},
-				{"type": "ice", "shelf": 0, "col": 29},
+				{"type": "crate", "shelf": 0, "col": 29, "sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ANGRY_ROAST_CHICKEN},
 				{"type": "ice", "shelf": 0, "col": 37},
-				{"type": "ice", "shelf": 1, "col": 7},
+				{"type": "crate", "shelf": 1, "col": 7, "sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ANGRY_DRUMSTICK},
 				{"type": "ice", "shelf": 1, "col": 31},
-				{"type": "ice", "shelf": 1, "col": 35},
+				{"type": "crate", "shelf": 1, "col": 35, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CONE},
 				{"type": "ice", "shelf": 2, "col": 10},
-				{"type": "ice", "shelf": 2, "col": 27},
+				{"type": "crate", "shelf": 2, "col": 27, "sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ANGRY_ROAST_CHICKEN},
 				{"type": "ice", "shelf": 2, "col": 36},
-				{"type": "ice", "shelf": 3, "col": 11},
+				{"type": "crate", "shelf": 3, "col": 11, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_ICE_LOLLY},
 				{"type": "ice", "shelf": 3, "col": 34},
-				{"type": "ice", "shelf": 3, "col": 38},
+				{"type": "crate", "shelf": 3, "col": 38, "sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ANGRY_DRUMSTICK},
 				{"type": "ice", "shelf": 4, "col": 24},
-				{"type": "ice", "shelf": 4, "col": 27},
+				{"type": "crate", "shelf": 4, "col": 27, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_CONE},
 				{"type": "ice", "shelf": 4, "col": 38},
-				{"type": "ice", "shelf": 5, "col": 8},
+				{"type": "crate", "shelf": 5, "col": 8, "sheet": AisleSprites.POULTRY, "sprite": AisleSprites.ANGRY_ROAST_CHICKEN},
 				{"type": "ice", "shelf": 5, "col": 20},
-				{"type": "ice", "shelf": 5, "col": 26},
+				{"type": "crate", "shelf": 5, "col": 26, "sheet": AisleSprites.TREATS, "sprite": AisleSprites.ANGRY_ICE_LOLLY},
 			],
 			"powerups": [
 				{"id": "pu4", "kind": "clean", "label": "Grit Salt", "shelf": 2, "col": 4},
@@ -274,7 +350,7 @@ static func levels() -> Array:
 				{"shelf": 5, "col": 22},
 				{"shelf": 5, "col": 23},
 			],
-			"list": ["chicken", "turkey", "vanillatub", "chocice", "icepop", "sorbet"],
+			"list": ["chicken", "drumsticks", "vanillatub", "chocice", "icepop", "sorbet"],
 		},
 		{
 			"name": "4 - Health & Beauty",
@@ -283,32 +359,51 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"par": 85.0,
+			# cosmetics: cool mauve, the cleanest-looking aisle of the five
+			"theme": {
+				"interior": Color(0.170, 0.150, 0.190),
+				"carcass": Color(0.290, 0.260, 0.330),
+				"back_a": Color(0.340, 0.310, 0.390),
+				"back_b": Color(0.310, 0.280, 0.360),
+				"floor": Color(0.200, 0.180, 0.230),
+				"sign": Color(0.486, 0.525, 0.596),
+			},
+			# Only four makeup sprites exist, so those four lead the list and
+			# the rest fall back to their procedural chip. No item is ever
+			# asked for wearing art that is not really its own.
 			"items": [
+				{"id": "blusher", "label": "Blusher", "coins": 3, "type": "blusher", "shelf": 4, "col": 34,
+					"sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.BLUSHER_PEACH},
+				{"id": "lipstick", "label": "Lipstick", "coins": 3, "type": "lipstick", "shelf": 2, "col": 11,
+					"sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.LIPSTICK_RED},
+				{"id": "foundation", "label": "Foundation", "coins": 4, "type": "foundation", "shelf": 2, "col": 32,
+					"sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.BLUSHER_DARK},
+				{"id": "nailpolish", "label": "Nail Polish", "coins": 2, "type": "nailpolish", "shelf": 4, "col": 20,
+					"sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.LIPSTICK_GREEN},
 				{"id": "hairbrush", "label": "Hairbrush", "coins": 1, "type": "hairbrush", "shelf": 0, "col": 6},
 				{"id": "comb", "label": "Comb", "coins": 1, "type": "comb", "shelf": 1, "col": 17},
-				{"id": "lipstick", "label": "Lipstick", "coins": 3, "type": "lipstick", "shelf": 2, "col": 11},
 				{"id": "mascara", "label": "Mascara", "coins": 3, "type": "mascara", "shelf": 3, "col": 25},
-				{"id": "foundation", "label": "Foundation", "coins": 4, "type": "foundation", "shelf": 2, "col": 32},
-				{"id": "nailpolish", "label": "Nail Polish", "coins": 2, "type": "nailpolish", "shelf": 4, "col": 20},
-				{"id": "blusher", "label": "Blusher", "coins": 3, "type": "blusher", "shelf": 4, "col": 34},
 				{"id": "shampoo", "label": "Shampoo", "coins": 1, "type": "shampoo", "shelf": 0, "col": 30},
 			],
 			"hazards": [
-				{"type": "soap", "shelf": 0, "col": 9},
-				{"type": "soap", "shelf": 0, "col": 19},
-				{"type": "soap", "shelf": 0, "col": 29},
-				{"type": "soap", "shelf": 1, "col": 22},
-				{"type": "soap", "shelf": 1, "col": 25},
-				{"type": "soap", "shelf": 1, "col": 28},
-				{"type": "soap", "shelf": 2, "col": 12},
-				{"type": "soap", "shelf": 2, "col": 26},
-				{"type": "soap", "shelf": 2, "col": 30},
-				{"type": "soap", "shelf": 3, "col": 12},
-				{"type": "soap", "shelf": 3, "col": 32},
-				{"type": "soap", "shelf": 3, "col": 35},
-				{"type": "soap", "shelf": 4, "col": 7},
-				{"type": "soap", "shelf": 4, "col": 16},
-				{"type": "soap", "shelf": 4, "col": 26},
+				# The soap monster keeps the "soap" kind: its bubble effect is
+				# this aisle's signature, and the sprite's 96x66 art is almost
+				# exactly the soap hitbox's 39.6x27 aspect, so it does not squash.
+				{"type": "soap", "shelf": 0, "col": 9, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 0, "col": 19, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 0, "col": 29, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 1, "col": 22, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 1, "col": 25, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 1, "col": 28, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 2, "col": 12, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 2, "col": 26, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 2, "col": 30, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 3, "col": 12, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 3, "col": 32, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 3, "col": 35, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 4, "col": 7, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 4, "col": 16, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
+				{"type": "soap", "shelf": 4, "col": 26, "sheet": AisleSprites.BEAUTY, "sprite": AisleSprites.ANGRY_SOAP},
 			],
 			"powerups": [
 				{"id": "pu6", "kind": "boost", "label": "Energy Drink", "shelf": 1, "col": 4},
@@ -324,7 +419,7 @@ static func levels() -> Array:
 				{"shelf": 4, "col": 29},
 				{"shelf": 4, "col": 30},
 			],
-			"list": ["hairbrush", "comb", "lipstick", "mascara", "foundation", "nailpolish"],
+			"list": ["blusher", "lipstick", "foundation", "nailpolish", "hairbrush", "comb"],
 		},
 		{
 			"name": "5 - All-Store Pick",
@@ -333,6 +428,16 @@ static func levels() -> Array:
 			"order": "shuffle",
 			"randomise": true,
 			"par": 240.0,
+			# the whole shop, so it keeps the neutral house grey rather than
+			# picking a side - the section banners do the signposting here
+			"theme": {
+				"interior": Color(0.140, 0.160, 0.200),
+				"carcass": Color(0.230, 0.260, 0.310),
+				"back_a": Color(0.280, 0.310, 0.370),
+				"back_b": Color(0.250, 0.280, 0.340),
+				"floor": Color(0.180, 0.200, 0.240),
+				"sign": Color(0.902, 0.114, 0.145),
+			},
 			"pick": 10,
 			"sections": [
 				{"col": 0, "name": "Produce"},

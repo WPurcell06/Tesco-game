@@ -1,17 +1,63 @@
 extends Node2D
 
-# Home screen: title, aisle select, and each aisle's best time.
-# Built in code like the rest of the game, so there is no scene to wire up.
+# Home screen, built as a store interior: the four themed aisles hang off a
+# ceiling rail as signage and All-Store Pick gets a wider sign of its own
+# below. Built in code like the rest of the game, so there is no scene to
+# wire up.
+#
+# Two layers, deliberately:
+#   this Node2D's _draw()  the store itself - back wall, shelf banding, floor,
+#                          ceiling rail. Renders under everything.
+#   a CanvasLayer          every Control. Controls need a Control/CanvasLayer
+#                          ancestor to anchor against the real viewport rect;
+#                          parented straight onto a Node2D, PRESET_FULL_RECT
+#                          has nothing to size against and the layout collapses
+#                          to its content's natural size instead of centring.
+#
+# The design is authored against the project's fixed 1152x648 viewport, so
+# blocks are positioned against VIEW rather than flowed - it is a poster, not
+# a document, and the aspect never changes under it.
 
 const CLICK := "res://ui/click.ogg"
 
-# Tesco's own brand blue/red, used for the backdrop and header band so the
-# home screen reads as the shop rather than a generic dark game menu.
-const TESCO_BLUE := Color(0.0, 0.220, 0.478)   # #00387A
-const TESCO_RED  := Color(0.902, 0.114, 0.145) # #E61D25
+const VIEW := Vector2(1152.0, 648.0)
+
+# --- palette ------------------------------------------------------------------
+const BG_DEEP   := Color(0.000, 0.165, 0.360)   # back wall
+const FLOOR_TOP := Color(0.043, 0.145, 0.271)
+const FLOOR_BOT := Color(0.086, 0.216, 0.373)
+const DARK      := Color(0.043, 0.071, 0.125)   # every border and hard shadow
+const CREAM     := Color(0.969, 0.961, 0.937)   # the price strip on a sign
+const RED       := Color(0.902, 0.114, 0.145)
+const ACCENT    := Color(1.000, 0.831, 0.000)
+const MUTED     := Color(0.561, 0.702, 0.867)
+const NO_TIME   := Color(0.725, 0.702, 0.639)   # "--" when an aisle is unplayed
+
+# Per-aisle sign colour, and the short name the sign carries. Store signage is
+# read at a glance from across the shop, so the signs use one word where the
+# level's full name would not fit.
+const AISLES := [
+	{"colour": Color(0.227, 0.655, 0.341), "short": "PRODUCE"},
+	{"colour": Color(0.949, 0.718, 0.020), "short": "SNACKS"},
+	{"colour": Color(0.122, 0.435, 0.816), "short": "FROZEN"},
+	{"colour": Color(0.486, 0.525, 0.596), "short": "HEALTH"},
+	{"colour": Color(0.902, 0.114, 0.145), "short": "ALL-STORE PICK"},
+]
+
+# --- layout -------------------------------------------------------------------
+const RAIL_Y      := 232.0     # the ceiling rail the four signs hang from
+const RAIL_INSET  := 64.0
+const STEM_H      := 20.0      # the hanger between rail and sign
+const SIGN_W      := 194.0
+const SIGN_H      := 78.0
+const SIGN_GAP    := 22.0
+const BIG_SIGN_W  := 420.0
+const SHADOW_DROP := 5.0       # hard offset shadow, no blur - it is pixel art
+const BORDER      := 3
 
 var _levels: Array = []
 var _sfx: AudioStreamPlayer
+var _layer: CanvasLayer
 
 
 func _ready() -> void:
@@ -19,44 +65,48 @@ func _ready() -> void:
 	_build()
 
 
+# ===========================================================================
+# THE STORE (drawn under the UI)
+# ===========================================================================
+
+func _draw() -> void:
+	# back wall
+	draw_rect(Rect2(0.0, 0.0, VIEW.x, VIEW.y), BG_DEEP, true)
+
+	# faint shelf banding, so the backdrop reads as aisle rather than wallpaper
+	var y := 0.0
+	while y < VIEW.y:
+		draw_rect(Rect2(0.0, y, VIEW.x, 4.0), Color(1, 1, 1, 0.045), true)
+		y += 50.0
+
+	# floor slab, with a hard edge where it meets the wall
+	var floor_top := VIEW.y - 132.0
+	draw_rect(Rect2(0.0, floor_top, VIEW.x, 132.0), FLOOR_TOP, true)
+	draw_rect(Rect2(0.0, floor_top + 40.0, VIEW.x, 92.0), FLOOR_BOT, true)
+	draw_rect(Rect2(0.0, floor_top - 5.0, VIEW.x, 5.0), DARK, true)
+
+	# corner shading, so the middle of the screen carries the eye
+	draw_rect(Rect2(0.0, 0.0, VIEW.x, 90.0), Color(0, 0, 0, 0.16), true)
+	draw_rect(Rect2(0.0, VIEW.y - 60.0, VIEW.x, 60.0), Color(0, 0, 0, 0.12), true)
+
+	# the ceiling rail the aisle signs hang from
+	draw_rect(Rect2(RAIL_INSET, RAIL_Y, VIEW.x - RAIL_INSET * 2.0, 5.0), DARK, true)
+
+
+# ===========================================================================
+# UI
+# ===========================================================================
+
 func _build() -> void:
 	var font := Session.ui_font()
 
-	# Controls need a Control/CanvasLayer ancestor to anchor against the actual
-	# viewport rect. Parented straight onto this Node2D, PRESET_FULL_RECT has
-	# no real area to size against and the whole layout collapses to its
-	# content's natural (left-hugging) size instead of filling and centering.
-	var layer := CanvasLayer.new()
-	add_child(layer)
+	_layer = CanvasLayer.new()
+	add_child(_layer)
 
-	# Tesco blue backdrop with a red header band, echoing the storefront's own
-	# colour split rather than the generic dark panel it had before.
-	var bg := ColorRect.new()
-	bg.color = TESCO_BLUE
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	layer.add_child(bg)
-
-	var header := ColorRect.new()
-	header.color = TESCO_RED
-	header.position = Vector2(0.0, 0.0)
-	header.size = Vector2(1152.0, 96.0)
-	layer.add_child(header)
-
-	# a faint band of shelving behind the title, so the home screen looks like
-	# it belongs to the game rather than a settings dialog
-	var strip := TextureRect.new()
-	var sheet := ShelfTheme.sheet_texture()
-	if sheet != null:
-		var at := AtlasTexture.new()
-		at.atlas = sheet
-		at.region = ShelfTheme.region(ShelfTheme.BEAM_MID)
-		strip.texture = at
-		strip.stretch_mode = TextureRect.STRETCH_TILE
-		strip.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-		strip.modulate = Color(1, 1, 1, 0.16)
-		strip.position = Vector2(0.0, 150.0)
-		strip.size = Vector2(1152.0, 54.0)
-		layer.add_child(strip)
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_layer.add_child(root)
 
 	if ResourceLoader.exists(CLICK):
 		_sfx = AudioStreamPlayer.new()
@@ -64,113 +114,323 @@ func _build() -> void:
 		_sfx.volume_db = -8.0
 		add_child(_sfx)
 
-	var root := VBoxContainer.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.alignment = BoxContainer.ALIGNMENT_CENTER
-	root.add_theme_constant_override("separation", 6)
-	layer.add_child(root)
+	_build_title(root, font)
+	_build_mode_row(root, font)
+	_build_signs(root, font)
+	_build_clubcard(root, font)
+	_build_controls(root, font)
 
-	root.add_child(_logo_slot(font))
-	root.add_child(_spacer(10))
-	root.add_child(_mode_row(font))
-	root.add_child(_spacer(12))
-
-	var grid := VBoxContainer.new()
-	grid.alignment = BoxContainer.ALIGNMENT_CENTER
-	grid.add_theme_constant_override("separation", 8)
-	root.add_child(grid)
-
-	# Blue/red alternating to match the storefront palette. Grey buttons with
-	# white text were unreadable, so aisle 4 keeps grey and every label
-	# carries a dark outline that works on any of the skins.
-	var colours := ["blue", "red", "blue", "grey", "red"]
-	for i in range(_levels.size()):
-		grid.add_child(_aisle_row(i, colours[i % colours.size()], font))
-
-	root.add_child(_spacer(10))
-	var pts := Clubcard.total()
-	root.add_child(_title("CLUBCARD  %s pts" % _thousands(pts), 20,
-		Color(0.62, 0.84, 1.00), font))
-
-	root.add_child(_spacer(10))
-	root.add_child(_title("arrows move  -  up or space jumps  -  down drops through  -  R restarts",
-		15, Color(0.72, 0.80, 0.92, 0.75), font))
+	queue_redraw()
 
 
-## Reserved space for the title graphic. Drops in res://ui/logo.png the moment
-## that file exists; until then it draws a labelled placeholder at the exact
-## size the art needs to be.
-func _logo_slot(font: FontFile) -> Control:
-	var holder := CenterContainer.new()
-	holder.custom_minimum_size = Vector2(0.0, 150.0)
-
+## Title, plus the logo slot. res://ui/logo.png replaces the wordmark the
+## moment that file exists - no code change needed.
+func _build_title(root: Control, font: FontFile) -> void:
 	if ResourceLoader.exists("res://ui/logo.png"):
 		var tr := TextureRect.new()
 		tr.texture = load("res://ui/logo.png")
 		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		tr.custom_minimum_size = Vector2(560.0, 150.0)
-		holder.add_child(tr)
-		return holder
+		tr.size = Vector2(560.0, 150.0)
+		tr.position = Vector2((VIEW.x - 560.0) * 0.5, 20.0)
+		root.add_child(tr)
+		return
 
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.custom_minimum_size = Vector2(560.0, 150.0)
-	box.add_child(_title("TROLLEY DASH", 62, Color(1, 1, 1), font))
-	box.add_child(_title("logo goes here  -  ui/logo.png  -  560 x 150",
-		13, Color(1, 1, 1, 0.55), font))
-	holder.add_child(box)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(row)
+
+	# the trolley mark. Drawn rather than an asset - it is a few strokes, and
+	# this way it recolours with the accent for free.
+	var icon := Control.new()
+	icon.custom_minimum_size = Vector2(44.0, 44.0)
+	icon.draw.connect(_draw_trolley_icon.bind(icon))
+	row.add_child(icon)
+
+	var title := _label("TROLLEY DASH", 56, Color(1, 1, 1), font)
+	title.add_theme_color_override("font_shadow_color", DARK)
+	title.add_theme_constant_override("shadow_offset_x", 0)
+	title.add_theme_constant_override("shadow_offset_y", 5)
+	row.add_child(title)
+
+	# A plain Control parent does not resize its children, so setting position
+	# and size directly is enough - the default top-left anchors already mean
+	# what we want, and an anchor preset here only fights them.
+	row.position = Vector2(0.0, 26.0)
+	row.size = Vector2(VIEW.x, 66.0)
+
+	var sub := _label("GRAB THE LIST  -  BEAT THE CLOCK", 13, ACCENT, font)
+	sub.position = Vector2(0.0, 100.0)
+	sub.size = Vector2(VIEW.x, 20.0)
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(sub)
+
+
+func _draw_trolley_icon(who: Control) -> void:
+	var c := ACCENT
+	var s := 44.0
+	# basket
+	who.draw_polyline(PackedVector2Array([
+		Vector2(s * 0.08, s * 0.16), Vector2(s * 0.22, s * 0.16),
+		Vector2(s * 0.36, s * 0.62), Vector2(s * 0.86, s * 0.62),
+		Vector2(s * 0.96, s * 0.30), Vector2(s * 0.28, s * 0.30),
+	]), c, 2.6, true)
+	# wheels
+	who.draw_arc(Vector2(s * 0.44, s * 0.82), s * 0.08, 0.0, TAU, 14, c, 2.6, true)
+	who.draw_arc(Vector2(s * 0.80, s * 0.82), s * 0.08, 0.0, TAU, 14, c, 2.6, true)
+
+
+## Ordered runs follow the list top to bottom with a chevron pointing at the
+## next item; any-order runs let you grab things however you like.
+func _build_mode_row(root: Control, font: FontFile) -> void:
+	var wrap := HBoxContainer.new()
+	wrap.add_theme_constant_override("separation", 10)
+	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
+	wrap.position = Vector2(0.0, 150.0)
+	wrap.size = Vector2(VIEW.x, 40.0)
+	root.add_child(wrap)
+
+	var cap := _label("ORDER", 12, MUTED, font)
+	cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	wrap.add_child(cap)
+
+	for spec in [["IN ORDER", "ordered"], ["ANY ORDER", "any"]]:
+		var chosen: bool = Session.order_mode == str(spec[1])
+		var b := Button.new()
+		b.text = str(spec[0])
+		b.custom_minimum_size = Vector2(148.0, 40.0)
+		b.focus_mode = Control.FOCUS_NONE
+		if font != null:
+			b.add_theme_font_override("font", font)
+		b.add_theme_font_size_override("font_size", 15)
+		b.add_theme_color_override("font_color",
+			Color(0.063, 0.137, 0.247) if chosen else Color(0.812, 0.878, 0.961))
+		b.add_theme_color_override("font_hover_color",
+			Color(0.063, 0.137, 0.247) if chosen else Color(1, 1, 1))
+		var sb := _flat(ACCENT if chosen else Color(0.071, 0.275, 0.498), DARK)
+		for st in ["normal", "hover", "pressed", "focus"]:
+			b.add_theme_stylebox_override(st, sb)
+		b.pressed.connect(_set_mode.bind(str(spec[1])))
+		wrap.add_child(b)
+
+
+## The four themed aisles hang in a row off the rail; All-Store Pick sits on a
+## wider sign below, because it is the whole shop rather than one aisle.
+func _build_signs(root: Control, font: FontFile) -> void:
+	var count := mini(4, _levels.size())
+	var total := float(count) * SIGN_W + float(maxi(count - 1, 0)) * SIGN_GAP
+	var x := (VIEW.x - total) * 0.5
+	var y := RAIL_Y + 5.0
+
+	for i in range(count):
+		root.add_child(_hanging_sign(i, SIGN_W, Vector2(x, y), font))
+		x += SIGN_W + SIGN_GAP
+
+	if _levels.size() >= 5:
+		var bx := (VIEW.x - BIG_SIGN_W) * 0.5
+		root.add_child(_hanging_sign(4, BIG_SIGN_W, Vector2(bx, y + STEM_H + SIGN_H + 26.0),
+			font, false))
+
+
+## One sign: hanger stem, coloured board carrying the aisle number and name,
+## and a cream price strip along the bottom holding the best time.
+func _hanging_sign(index: int, width: float, at: Vector2, font: FontFile,
+		with_stem: bool = true) -> Control:
+	var lvl: Dictionary = _levels[index]
+	var name_txt := str(lvl["name"])
+	var spec: Dictionary = AISLES[index % AISLES.size()]
+	var stem := STEM_H if with_stem else 0.0
+
+	var holder := Control.new()
+	holder.position = at
+	holder.custom_minimum_size = Vector2(width, stem + SIGN_H + SHADOW_DROP)
+	holder.size = holder.custom_minimum_size
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	if with_stem:
+		var rod := ColorRect.new()
+		rod.color = DARK
+		rod.position = Vector2(width * 0.5 - 1.5, 0.0)
+		rod.size = Vector2(3.0, STEM_H)
+		holder.add_child(rod)
+
+	# hard offset shadow: a second rect behind, no blur, because everything
+	# else in this game is pixel art and a soft shadow reads as a smudge
+	var shadow := ColorRect.new()
+	shadow.color = DARK
+	shadow.position = Vector2(0.0, stem + SHADOW_DROP)
+	shadow.size = Vector2(width, SIGN_H)
+	holder.add_child(shadow)
+
+	var board := PanelContainer.new()
+	board.position = Vector2(0.0, stem)
+	board.size = Vector2(width, SIGN_H)
+	board.add_theme_stylebox_override("panel", _flat(spec["colour"], DARK, 0.0, 0.0))
+	board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.add_child(board)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	board.add_child(col)
+
+	# --- the board itself: number + name
+	var head := HBoxContainer.new()
+	head.alignment = BoxContainer.ALIGNMENT_CENTER
+	head.add_theme_constant_override("separation", 9)
+	head.custom_minimum_size = Vector2(0.0, 43.0)
+	col.add_child(head)
+
+	var num := _label(str(index + 1), 30, Color(1, 1, 1), font)
+	num.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.42))
+	num.add_theme_constant_override("shadow_offset_x", 0)
+	num.add_theme_constant_override("shadow_offset_y", 2)
+	num.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(num)
+
+	var nm := _label(str(spec["short"]), 15, Color(1, 1, 1), font)
+	nm.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	head.add_child(nm)
+
+	# --- price strip: the aisle's best time, set like a shelf ticket
+	var strip := PanelContainer.new()
+	strip.add_theme_stylebox_override("panel", _strip_style())
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(strip)
+
+	var strip_row := HBoxContainer.new()
+	strip_row.add_theme_constant_override("separation", 6)
+	strip.add_child(strip_row)
+
+	var best_cap := _label("BEST", 9, Color(0.541, 0.522, 0.467), font)
+	best_cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	best_cap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	best_cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	strip_row.add_child(best_cap)
+
+	var best := Session.best_for(name_txt)
+	var best_txt := "--" if best == INF else "%.1fs" % best
+	var best_lbl := _label(best_txt, 14, RED if best != INF else NO_TIME, font)
+	best_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	best_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	strip_row.add_child(best_lbl)
+
+	# --- the whole sign is the button. A transparent Button laid over the top
+	#     keeps the visual free to be a normal container stack.
+	var hit := Button.new()
+	hit.flat = true
+	hit.text = ""
+	hit.focus_mode = Control.FOCUS_NONE
+	hit.position = Vector2(0.0, stem)
+	hit.size = Vector2(width, SIGN_H)
+	hit.tooltip_text = name_txt
+	hit.mouse_filter = Control.MOUSE_FILTER_STOP
+	hit.pressed.connect(_play.bind(index))
+	holder.add_child(hit)
+
 	return holder
 
 
-## Ordered runs follow the list top to bottom with an arrow pointing at the next
-## item. Any-order runs let you grab things however you like.
-func _mode_row(font: FontFile) -> Control:
-	var wrap := CenterContainer.new()
+## Lifetime Clubcard balance, sat on the floor strip.
+func _build_clubcard(root: Control, font: FontFile) -> void:
+	var panel := PanelContainer.new()
+	panel.position = Vector2(40.0, VIEW.y - 96.0)
+	panel.add_theme_stylebox_override("panel",
+		_flat(Color(0.024, 0.078, 0.157, 0.72), DARK))
+	root.add_child(panel)
+
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	wrap.add_child(row)
+	row.add_theme_constant_override("separation", 12)
+	panel.add_child(row)
 
-	row.add_child(_title("ORDER", 16, Color(0.62, 0.66, 0.76), font))
+	# the card itself, drawn: blue with a red band, same as the in-game pickup
+	var card := Control.new()
+	card.custom_minimum_size = Vector2(46.0, 30.0)
+	card.draw.connect(_draw_clubcard.bind(card))
+	row.add_child(card)
 
-	for spec in [["In order", "ordered"], ["Any order", "any"]]:
-		var b := Button.new()
-		b.text = str(spec[0])
-		b.custom_minimum_size = Vector2(170.0, 50.0)
-		if font != null:
-			b.add_theme_font_override("font", font)
-		b.add_theme_font_size_override("font_size", 17)
-		b.add_theme_color_override("font_outline_color", Color(0.08, 0.09, 0.12, 0.95))
-		b.add_theme_constant_override("outline_size", 5)
-		var chosen: bool = Session.order_mode == str(spec[1])
-		b.add_theme_color_override("font_color",
-			Color(1, 1, 1) if chosen else Color(0.72, 0.75, 0.82))
-		var sb := Session.button_style("yellow" if chosen else "grey")
-		if sb != null:
-			for st in ["normal", "hover", "pressed", "focus"]:
-				b.add_theme_stylebox_override(st, sb)
-		b.pressed.connect(_set_mode.bind(str(spec[1])))
-		row.add_child(b)
-
-	return wrap
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 1)
+	row.add_child(col)
+	col.add_child(_label("CLUBCARD BALANCE", 9, MUTED, font))
+	col.add_child(_label("%s pts" % _thousands(Clubcard.total()), 21, Color(1, 1, 1), font))
 
 
-func _set_mode(mode: String) -> void:
-	Session.order_mode = mode
-	for c in get_children():
-		c.queue_free()
-	_sfx = null          # about to be freed; _build makes a fresh one
-	_build()
+func _draw_clubcard(who: Control) -> void:
+	var r := Rect2(0.0, 0.0, 46.0, 30.0)
+	who.draw_rect(r, Color(0.0, 0.220, 0.478), true)
+	who.draw_rect(Rect2(0.0, 11.0, 46.0, 7.0), RED, true)
+	who.draw_rect(Rect2(5.0, 4.0, 13.0, 5.0), Color(1, 1, 1, 0.85), true)
+	who.draw_rect(r, DARK, false, 2.0)
 
 
-func _title(txt: String, size: int, col: Color, font: FontFile) -> Label:
+func _build_controls(root: Control, font: FontFile) -> void:
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.position = Vector2(VIEW.x - 460.0, VIEW.y - 96.0)
+	col.size = Vector2(420.0, 0.0)
+	root.add_child(col)
+
+	for spec in [
+		["LEFT / RIGHT MOVE   -   UP or SPACE JUMP", MUTED],
+		["DOWN DROP THROUGH   -   R RESTART", MUTED],
+		["PRESS 1-5 TO START AN AISLE", ACCENT],
+	]:
+		var l := _label(str(spec[0]), 11, spec[1], font)
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		l.custom_minimum_size = Vector2(420.0, 0.0)
+		col.add_child(l)
+
+
+# ===========================================================================
+# HELPERS
+# ===========================================================================
+
+## Chunky flat panel: solid fill, hard dark border, square corners. Everything
+## on this screen is built from it.
+##
+## The margins are parameters because a sign board needs ZERO of them: its
+## 78px height is fixed, and 6px top and bottom leaves only 60px for a header
+## and ticket strip that need 72 between them - the strip would be pushed out
+## of the board. The header centres itself and the strip carries its own
+## padding, so a sign gives up the outer margin rather than the fit.
+func _flat(fill: Color, border: Color, mh: float = 12.0, mv: float = 6.0) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = fill
+	sb.border_color = border
+	sb.set_border_width_all(BORDER)
+	sb.set_corner_radius_all(0)
+	sb.set_content_margin(SIDE_LEFT, mh)
+	sb.set_content_margin(SIDE_RIGHT, mh)
+	sb.set_content_margin(SIDE_TOP, mv)
+	sb.set_content_margin(SIDE_BOTTOM, mv)
+	return sb
+
+
+## The cream ticket strip along the bottom of a sign: only its TOP edge is
+## drawn, so it reads as part of the board rather than a box sitting on it.
+func _strip_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = CREAM
+	sb.border_color = DARK
+	sb.set_border_width_all(0)
+	sb.border_width_top = BORDER
+	sb.set_corner_radius_all(0)
+	sb.set_content_margin(SIDE_LEFT, 11.0)
+	sb.set_content_margin(SIDE_RIGHT, 11.0)
+	sb.set_content_margin(SIDE_TOP, 4.0)
+	sb.set_content_margin(SIDE_BOTTOM, 4.0)
+	return sb
+
+
+func _label(txt: String, size: int, col: Color, font: FontFile) -> Label:
 	var l := Label.new()
 	l.text = txt
-	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
 	if font != null:
 		l.add_theme_font_override("font", font)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return l
 
 
@@ -188,47 +448,13 @@ func _thousands(n: int) -> String:
 	return ("-" if n < 0 else "") + out
 
 
-func _spacer(h: int) -> Control:
-	var c := Control.new()
-	c.custom_minimum_size = Vector2(0.0, float(h))
-	return c
-
-
-func _aisle_row(index: int, colour: String, font: FontFile) -> Control:
-	var lvl: Dictionary = _levels[index]
-	var name_txt := str(lvl["name"])
-
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 10)
-
-	var btn := Button.new()
-	btn.text = name_txt
-	btn.custom_minimum_size = Vector2(430.0, 62.0)
-	if font != null:
-		btn.add_theme_font_override("font", font)
-	btn.add_theme_font_size_override("font_size", 22)
-	btn.add_theme_color_override("font_color", Color(1, 1, 1))
-	btn.add_theme_color_override("font_hover_color", Color(1.0, 0.95, 0.75))
-	btn.add_theme_color_override("font_outline_color", Color(0.08, 0.09, 0.12, 0.95))
-	btn.add_theme_constant_override("outline_size", 5)
-	var sb := Session.button_style(colour)
-	if sb != null:
-		btn.add_theme_stylebox_override("normal", sb)
-		btn.add_theme_stylebox_override("hover", sb)
-		btn.add_theme_stylebox_override("pressed", sb)
-		btn.add_theme_stylebox_override("focus", sb)
-	btn.pressed.connect(_play.bind(index))
-	row.add_child(btn)
-
-	var best := Session.best_for(name_txt)
-	var best_txt := "best  --" if best == INF else "best  %.1fs" % best
-	var lbl := _title(best_txt, 18, Color(0.55, 0.90, 0.65) if best != INF else Color(0.45, 0.48, 0.56), font)
-	lbl.custom_minimum_size = Vector2(130.0, 0.0)
-	lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(lbl)
-
-	return row
+func _set_mode(mode: String) -> void:
+	Session.order_mode = mode
+	for c in get_children():
+		c.queue_free()
+	_layer = null
+	_sfx = null          # about to be freed; _build makes a fresh one
+	_build()
 
 
 func _play(index: int) -> void:

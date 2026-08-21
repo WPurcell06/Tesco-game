@@ -15,9 +15,25 @@ const BEAM_MID   := 5
 const BEAM_RIGHT := 6
 
 # --- the racking uprights standing between shelves --------------------------
-const POST_PLAIN := 36
-const POST_BRACE := 37
-const POST_FOOT  := 68
+# Kenney authored the support column as a THREE-PIECE assembly down one column
+# of the tilemap, and it only looks right assembled that way:
+#
+#   POST_HEAD (38)  the beam tile that already has the two post tops attached.
+#                   Replaces the plain beam tile wherever a column stands, so
+#                   the post visibly meets the shelf instead of butting it.
+#   POST_BODY (54)  the twin-shaft section. Its art runs edge to edge top and
+#                   bottom, so any number of them stack seamlessly.
+#   POST_FOOT (70)  the light footing plate that caps the bottom.
+#
+# All three are FULL TILE WIDTH - draw them at width_mult 1.0. Drawing the post
+# narrower squashes two shafts into one smear.
+#
+# Do NOT use 36 / 37 / 68 (girder fragments - an "H" and a diagonal brace, with
+# transparent gaps at the tile edges, so a stack reads as floating glyphs), and
+# do NOT use 43: that is the LADDER, not a post.
+const POST_HEAD  := 38
+const POST_BODY  := 54
+const POST_FOOT  := 70
 const POST_EVERY := 5     # draw an upright every N tiles
 
 # --- the yellow/black stripe used on a broken board's exposed end -----------

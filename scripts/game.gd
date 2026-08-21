@@ -30,6 +30,14 @@ const CLUBCARD_PER_SECOND   := 10     # points banked per second under par
 const LIST_W  := 196.0   # narrow on purpose: it overlays the playfield
 const ICON_PX := 22.0    # list icons, unrelated to the sprites' native size
 
+# --- hanging aisle signage ----------------------------------------------------
+# Spaced just under one viewport apart (1152px) so a sign is essentially always
+# on screen without them crowding the ceiling. The first sits a little in from
+# the spawn so it is readable from the starting position rather than clipped.
+const SIGN_EVERY   := 1080.0
+const SIGN_FIRST_X := 300.0
+const SIGN_DARK    := Color(0.043, 0.071, 0.125)
+
 enum State { READY, PLAYING, FINISHED }
 
 var state: int = State.READY
@@ -77,7 +85,6 @@ var list_box: VBoxContainer
 
 # End-of-run panel
 var end_panel: PanelContainer
-var end_title: Label
 var receipt: Receipt
 var name_edit: LineEdit
 var board_box: VBoxContainer
@@ -245,8 +252,11 @@ func _load_level(index: int) -> void:
 	var doors: Array = level.get("doors", [])
 	if not doors.is_empty():
 		var dl := DoorLayer.new()
-		for d2 in doors:
-			dl.tiles.append(Vector2i(int(d2["col"]), int(d2["shelf"])))
+		# A non-empty "doors" array now just means "this aisle is a freezer" -
+		# the glass covers the whole aisle, so the individual entries no longer
+		# pick out which tiles get a pane.
+		dl.level_width = level_width
+		dl.shelves = shelves
 		dl.tile_size = LevelData.TILE
 		dl.spacing = LevelData.SHELF_SPACING
 		dl.board_h = LevelData.BOARD_HEIGHT
@@ -601,7 +611,6 @@ func _finish() -> void:
 	if is_instance_valid(player):
 		player.set_physics_process(false)
 
-	end_title.text = "%s  -  list complete" % str(level["name"])
 
 	# bank the run's points once, here - _finish only ever runs on completion
 	var earned := clubcard_points()
@@ -794,7 +803,7 @@ func _build_end_panel(root: Control) -> void:
 		pstyle = _panel_style()
 	end_panel.add_theme_stylebox_override("panel", pstyle)
 	end_panel.set_anchors_preset(Control.PRESET_CENTER)
-	end_panel.position = Vector2(-410, -300)
+	end_panel.position = Vector2(-410, -308)
 	end_panel.custom_minimum_size = Vector2(820, 0)
 	end_panel.visible = false
 	root.add_child(end_panel)
@@ -803,10 +812,9 @@ func _build_end_panel(root: Control) -> void:
 	v.add_theme_constant_override("separation", 10)
 	end_panel.add_child(v)
 
-	end_title = _mk_label("", 22, Color(0.99, 0.79, 0.16))
-	end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(end_title)
-
+	# No panel title: the receipt prints the aisle's name across its own header,
+	# and the printer needs every pixel of height it can get.
+	#
 	# receipt on the left, name entry + leaderboard on the right. Side by side
 	# because stacked they overflow 648px of screen once a level's item list
 	# gets long.
@@ -817,7 +825,7 @@ func _build_end_panel(root: Control) -> void:
 	# Tall enough that a normal six-item receipt prints without scrolling; the
 	# scroller is there for All-Store Pick, whose ten-item list overflows it.
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(Receipt.W + 18.0, 468.0)
+	scroll.custom_minimum_size = Vector2(Receipt.W + 18.0, 505.0)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	main.add_child(scroll)
 
@@ -833,10 +841,34 @@ func _build_end_panel(root: Control) -> void:
 	row.add_theme_constant_override("separation", 8)
 	rightcol.add_child(row)
 
+	# A LineEdit inherits nothing from the rest of the HUD, so without an
+	# explicit skin it renders in the default theme - unreadable pale-on-pale
+	# against the panel, with a caret that vanishes. Every part of its look has
+	# to be set here: box, font, text, placeholder, caret and selection.
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Your name"
 	name_edit.max_length = 14
-	name_edit.custom_minimum_size = Vector2(200, 0)
+	name_edit.custom_minimum_size = Vector2(200, 40)
+	var ne_box := StyleBoxFlat.new()
+	ne_box.bg_color = Color(0.97, 0.96, 0.92)
+	ne_box.border_color = Color(0.043, 0.071, 0.125)
+	ne_box.set_border_width_all(3)
+	ne_box.set_corner_radius_all(0)
+	ne_box.set_content_margin(SIDE_LEFT, 10.0)
+	ne_box.set_content_margin(SIDE_RIGHT, 10.0)
+	ne_box.set_content_margin(SIDE_TOP, 6.0)
+	ne_box.set_content_margin(SIDE_BOTTOM, 6.0)
+	for st in ["normal", "focus", "read_only"]:
+		name_edit.add_theme_stylebox_override(st, ne_box)
+	var nf := Session.ui_font()
+	if nf != null:
+		name_edit.add_theme_font_override("font", nf)
+	name_edit.add_theme_font_size_override("font_size", 16)
+	name_edit.add_theme_color_override("font_color", Color(0.09, 0.13, 0.20))
+	name_edit.add_theme_color_override("font_placeholder_color", Color(0.55, 0.54, 0.50))
+	name_edit.add_theme_color_override("font_selected_color", Color(1, 1, 1))
+	name_edit.add_theme_color_override("selection_color", Color(0.12, 0.44, 0.82, 0.75))
+	name_edit.add_theme_color_override("caret_color", Color(0.09, 0.13, 0.20))
 	row.add_child(name_edit)
 
 	var btn_save := Button.new()
@@ -1040,18 +1072,20 @@ func _draw() -> void:
 
 	# store interior
 	draw_rect(Rect2(-400.0, roof - 500.0, w + 800.0, LevelData.FLOOR_Y - roof + 1000.0),
-		Color(0.14, 0.16, 0.20), true)
+		_theme("interior", Color(0.14, 0.16, 0.20)), true)
 
 	# shelf unit carcass
-	draw_rect(Rect2(0.0, roof, w, LevelData.FLOOR_Y - roof), Color(0.23, 0.26, 0.31), true)
+	draw_rect(Rect2(0.0, roof, w, LevelData.FLOOR_Y - roof),
+		_theme("carcass", Color(0.23, 0.26, 0.31)), true)
 
 	# alternating shelf backs
+	var back_a := _theme("back_a", Color(0.28, 0.31, 0.37))
+	var back_b := _theme("back_b", Color(0.25, 0.28, 0.34))
 	for b in range(shelves):
 		var by := _board_y(b)
 		var back := Rect2(0.0, by - LevelData.SHELF_SPACING + LevelData.BOARD_HEIGHT,
 			w, LevelData.SHELF_SPACING - LevelData.BOARD_HEIGHT)
-		var shade := Color(0.28, 0.31, 0.37) if b % 2 == 0 else Color(0.25, 0.28, 0.34)
-		draw_rect(back, shade, true)
+		draw_rect(back, back_a if b % 2 == 0 else back_b, true)
 
 	# section banners, used by the combined all-store level
 	var font := ThemeDB.fallback_font
@@ -1069,22 +1103,24 @@ func _draw() -> void:
 		draw_line(Vector2(gx, roof), Vector2(gx, LevelData.FLOOR_Y), grid, 1.0)
 
 	# --- racking uprights, drawn behind everything on the shelves.
-	#     A shelf gap is SHELF_SPACING tall (3 tiles); the post art is ONE tile,
-	#     so it has to be stacked to fill the gap. Drawing a single tile per gap
-	#     left the uprights floating in mid-air with the shelf unconnected above
-	#     and below them.
+	#     A shelf gap is SHELF_SPACING tall (3 tiles) and the post section is
+	#     ONE tile, so the section is stacked to fill the gap. The bottom-most
+	#     section of the ground-floor column is replaced by the footing plate.
+	#     Full tile width: the section is a twin shaft and squashes if narrowed.
 	if _sheet != null:
 		var per_gap := int(LevelData.SHELF_SPACING / LevelData.TILE)
 		var c := 0
 		while c < level_cols:
 			var px := float(c) * LevelData.TILE
 			for b3 in range(shelves):
-				var idx := ShelfTheme.POST_BRACE if b3 % 2 == 0 else ShelfTheme.POST_PLAIN
 				var gap_bottom := _board_y(b3)
 				for t in range(per_gap):
-					_blit(idx, px, gap_bottom - float(t + 1) * LevelData.TILE, 0.55)
-			# the foot caps the bottom-most tile of the ground-floor upright
-			_blit(ShelfTheme.POST_FOOT, px, _board_y(0) - LevelData.TILE, 0.55)
+					var ty := gap_bottom - float(t + 1) * LevelData.TILE
+					# the footing sits at the very bottom of the lowest column
+					if b3 == 0 and t == 0:
+						_blit(ShelfTheme.POST_FOOT, px, ty)
+					else:
+						_blit(ShelfTheme.POST_BODY, px, ty)
 			c += ShelfTheme.POST_EVERY
 
 	# --- boards. Only the solid segments, so gaps read as genuine holes.
@@ -1108,6 +1144,11 @@ func _draw() -> void:
 					idx = ShelfTheme.BEAM_LEFT
 				elif cc == c1 - 1:
 					idx = ShelfTheme.BEAM_RIGHT
+				# where an upright stands, use the beam tile that carries the
+				# post tops, so the column visibly meets the shelf rather than
+				# stopping just short of it
+				elif cc % ShelfTheme.POST_EVERY == 0 and b2 < shelves:
+					idx = ShelfTheme.POST_HEAD
 				_blit(idx, float(cc) * LevelData.TILE, yy)
 			# yellow/black stripe on the exposed end of a broken board
 			if sg.x > 1.0:
@@ -1117,6 +1158,61 @@ func _draw() -> void:
 
 	# aisle floor
 	draw_rect(Rect2(-400.0, LevelData.FLOOR_Y + LevelData.BOARD_HEIGHT, w + 800.0, 400.0),
-		Color(0.18, 0.20, 0.24), true)
+		_theme("floor", Color(0.18, 0.20, 0.24)), true)
 
+	_draw_aisle_signs(roof, w)
 	_draw_guide_arrow()
+
+
+## One colour out of the level's "theme" block, or the house default if this
+## aisle does not override it.
+func _theme(key: String, fallback: Color) -> Color:
+	var t: Dictionary = level.get("theme", {})
+	var v = t.get(key, fallback)
+	return v if v is Color else fallback
+
+
+## Hanging aisle signage, the same shape as the home screen's: a coloured board
+## with the aisle number and name, slung under the ceiling. Repeated along the
+## aisle rather than drawn once, so wherever you are there is one in view
+## telling you which aisle you are running down.
+func _draw_aisle_signs(roof: float, w: float) -> void:
+	var name_txt := str(level.get("name", ""))
+	# level names read "1 - Produce Pursuit"; the number is already on the badge
+	var parts := name_txt.split(" - ", false, 1)
+	var num_txt := str(level_index + 1)
+	var short_txt := name_txt
+	if parts.size() == 2:
+		num_txt = parts[0].strip_edges()
+		short_txt = parts[1].strip_edges()
+	short_txt = short_txt.to_upper()
+
+	var font := Session.ui_font()
+	var f: Font = font if font != null else ThemeDB.fallback_font
+	var sign_col := _theme("sign", Color(0.902, 0.114, 0.145))
+
+	var badge_w := 46.0
+	var name_w := f.get_string_size(short_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 20).x
+	var board_w := badge_w + name_w + 34.0
+	var board_h := 46.0
+	var top := roof - 78.0            # inside the 90px of headroom the camera allows
+
+	var x := SIGN_FIRST_X
+	while x < w:
+		var bx := x - board_w * 0.5
+		# hanger
+		draw_rect(Rect2(x - 2.0, top - 12.0, 4.0, 12.0), SIGN_DARK, true)
+		# hard offset shadow, matching the home screen's pixel-art panels
+		draw_rect(Rect2(bx + 0.0, top + 5.0, board_w, board_h), SIGN_DARK, true)
+		# board
+		draw_rect(Rect2(bx, top, board_w, board_h), sign_col, true)
+		draw_rect(Rect2(bx, top, board_w, board_h), SIGN_DARK, false, 3.0)
+		# number badge, punched out of the left end
+		draw_rect(Rect2(bx + 3.0, top + 3.0, badge_w - 6.0, board_h - 6.0),
+			Color(0, 0, 0, 0.24), true)
+		var nw := f.get_string_size(num_txt, HORIZONTAL_ALIGNMENT_LEFT, -1, 24).x
+		draw_string(f, Vector2(bx + badge_w * 0.5 - nw * 0.5, top + 33.0), num_txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(1, 1, 1))
+		draw_string(f, Vector2(bx + badge_w + 14.0, top + 31.0), short_txt,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color(1, 1, 1))
+		x += SIGN_EVERY
