@@ -45,8 +45,15 @@ const AISLES := [
 ]
 
 # --- layout -------------------------------------------------------------------
+# The rail is DERIVED, not fixed: the logo plate is taller than the plain
+# wordmark it replaces, so everything below it shifts down to suit. RAIL_Y is
+# only the starting value; _build recomputes _rail_y from the title's height.
 const RAIL_Y      := 232.0     # the ceiling rail the four signs hang from
 const RAIL_INSET  := 64.0
+const TITLE_GAP   := 14.0      # title block bottom -> order toggle
+const TOGGLE_H    := 40.0
+const RAIL_GAP    := 30.0      # order toggle bottom -> ceiling rail
+
 const STEM_H      := 20.0      # the hanger between rail and sign
 const SIGN_W      := 194.0
 const SIGN_H      := 78.0
@@ -55,9 +62,19 @@ const BIG_SIGN_W  := 420.0
 const SHADOW_DROP := 5.0       # hard offset shadow, no blur - it is pixel art
 const BORDER      := 3
 
+# --- the logo plate -----------------------------------------------------------
+# ui/logo.png is dark artwork on transparency, and the store wall behind it is
+# dark blue - straight on the wall the black half of the logo all but vanishes.
+# It is mounted on a lit cream sign plate instead, which fixes the contrast and
+# happens to be exactly the vocabulary the aisle signs already use.
+const LOGO_TOP   := 14.0
+const LOGO_MAX_H := 130.0      # width follows from the art's own aspect
+const LOGO_PAD   := 18.0
+
 var _levels: Array = []
 var _sfx: AudioStreamPlayer
 var _layer: CanvasLayer
+var _rail_y := RAIL_Y      # recomputed in _build from the title's height
 
 
 func _ready() -> void:
@@ -91,7 +108,7 @@ func _draw() -> void:
 	draw_rect(Rect2(0.0, VIEW.y - 60.0, VIEW.x, 60.0), Color(0, 0, 0, 0.12), true)
 
 	# the ceiling rail the aisle signs hang from
-	draw_rect(Rect2(RAIL_INSET, RAIL_Y, VIEW.x - RAIL_INSET * 2.0, 5.0), DARK, true)
+	draw_rect(Rect2(RAIL_INSET, _rail_y, VIEW.x - RAIL_INSET * 2.0, 5.0), DARK, true)
 
 
 # ===========================================================================
@@ -115,8 +132,10 @@ func _build() -> void:
 		_sfx.volume_db = -8.0
 		add_child(_sfx)
 
-	_build_title(root, font)
-	_build_mode_row(root, font)
+	var title_bottom := _build_title(root, font)
+	var toggle_y := title_bottom + TITLE_GAP
+	_rail_y = toggle_y + TOGGLE_H + RAIL_GAP
+	_build_mode_row(root, font, toggle_y)
 	_build_signs(root, font)
 	_build_clubcard(root, font)
 	_build_controls(root, font)
@@ -124,18 +143,48 @@ func _build() -> void:
 	queue_redraw()
 
 
-## Title, plus the logo slot. res://ui/logo.png replaces the wordmark the
-## moment that file exists - no code change needed.
-func _build_title(root: Control, font: FontFile) -> void:
+## Title, plus the logo slot: res://ui/logo.png replaces the wordmark the moment
+## that file exists. Returns the y the next block may start at, because the two
+## title treatments are different heights and everything below has to follow.
+func _build_title(root: Control, font: FontFile) -> float:
 	if ResourceLoader.exists("res://ui/logo.png"):
+		var tex: Texture2D = load("res://ui/logo.png")
+		# size off the ART's own aspect rather than a hardcoded box, so dropping
+		# in a differently-shaped logo never stretches it
+		var ar := float(tex.get_width()) / maxf(float(tex.get_height()), 1.0)
+		var lh := LOGO_MAX_H
+		var lw := lh * ar
+		var pw := lw + LOGO_PAD * 2.0
+		var ph := lh + LOGO_PAD * 2.0
+		var px := (VIEW.x - pw) * 0.5
+
+		var shadow := ColorRect.new()
+		shadow.color = DARK
+		shadow.position = Vector2(px, LOGO_TOP + SHADOW_DROP)
+		shadow.size = Vector2(pw, ph)
+		root.add_child(shadow)
+
+		var plate := PanelContainer.new()
+		plate.position = Vector2(px, LOGO_TOP)
+		plate.size = Vector2(pw, ph)
+		plate.add_theme_stylebox_override("panel", _flat(CREAM, DARK, LOGO_PAD, LOGO_PAD))
+		plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.add_child(plate)
+
 		var tr := TextureRect.new()
-		tr.texture = load("res://ui/logo.png")
-		tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		tr.texture = tex
+		# EXPAND_IGNORE_SIZE or the TextureRect's minimum size is the texture's
+		# full 576x232 and it forces the plate open to that instead.
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		# Smooth artwork, not pixel art, and shown SMALLER than source - nearest
+		# would alias the curved letterforms on the way down.
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		tr.size = Vector2(560.0, 150.0)
-		tr.position = Vector2((VIEW.x - 560.0) * 0.5, 20.0)
-		root.add_child(tr)
-		return
+		tr.custom_minimum_size = Vector2(lw, lh)
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		plate.add_child(tr)
+
+		return LOGO_TOP + ph + SHADOW_DROP
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 14)
@@ -167,6 +216,8 @@ func _build_title(root: Control, font: FontFile) -> void:
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(sub)
 
+	return 120.0
+
 
 func _draw_trolley_icon(who: Control) -> void:
 	var c := ACCENT
@@ -184,12 +235,12 @@ func _draw_trolley_icon(who: Control) -> void:
 
 ## Ordered runs follow the list top to bottom with a chevron pointing at the
 ## next item; any-order runs let you grab things however you like.
-func _build_mode_row(root: Control, font: FontFile) -> void:
+func _build_mode_row(root: Control, font: FontFile, at_y: float) -> void:
 	var wrap := HBoxContainer.new()
 	wrap.add_theme_constant_override("separation", 10)
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
-	wrap.position = Vector2(0.0, 150.0)
-	wrap.size = Vector2(VIEW.x, 40.0)
+	wrap.position = Vector2(0.0, at_y)
+	wrap.size = Vector2(VIEW.x, TOGGLE_H)
 	root.add_child(wrap)
 
 	var cap := _label("ORDER", 12, MUTED, font)
@@ -200,7 +251,7 @@ func _build_mode_row(root: Control, font: FontFile) -> void:
 		var chosen: bool = Session.order_mode == str(spec[1])
 		var b := Button.new()
 		b.text = str(spec[0])
-		b.custom_minimum_size = Vector2(148.0, 40.0)
+		b.custom_minimum_size = Vector2(148.0, TOGGLE_H)
 		b.focus_mode = Control.FOCUS_NONE
 		if font != null:
 			b.add_theme_font_override("font", font)
@@ -222,7 +273,7 @@ func _build_signs(root: Control, font: FontFile) -> void:
 	var count := mini(4, _levels.size())
 	var total := float(count) * SIGN_W + float(maxi(count - 1, 0)) * SIGN_GAP
 	var x := (VIEW.x - total) * 0.5
-	var y := RAIL_Y + 5.0
+	var y := _rail_y + 5.0
 
 	for i in range(count):
 		root.add_child(_hanging_sign(i, SIGN_W, Vector2(x, y), font))
