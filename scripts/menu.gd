@@ -87,9 +87,14 @@ func _build() -> void:
 	for i in range(_levels.size()):
 		grid.add_child(_aisle_row(i, colours[i % colours.size()], font))
 
-	root.add_child(_spacer(14))
+	root.add_child(_spacer(10))
+	var pts := Clubcard.total()
+	root.add_child(_title("CLUBCARD  %s pts" % _thousands(pts), 20,
+		Color(0.62, 0.84, 1.00), font))
+
+	root.add_child(_spacer(10))
 	root.add_child(_title("arrows move  -  up or space jumps  -  down drops through  -  R restarts",
-		15, Color(0.50, 0.54, 0.64), font))
+		15, Color(0.72, 0.80, 0.92, 0.75), font))
 
 
 ## Reserved space for the title graphic. Drops in res://ui/logo.png the moment
@@ -167,6 +172,20 @@ func _title(txt: String, size: int, col: Color, font: FontFile) -> Label:
 	if font != null:
 		l.add_theme_font_override("font", font)
 	return l
+
+
+## 12345 -> "12,345". Clubcard totals run into the thousands quickly and read
+## badly as a bare digit run.
+func _thousands(n: int) -> String:
+	var s := str(absi(n))
+	var out := ""
+	var c := 0
+	for i in range(s.length() - 1, -1, -1):
+		out = s[i] + out
+		c += 1
+		if c % 3 == 0 and i > 0:
+			out = "," + out
+	return ("-" if n < 0 else "") + out
 
 
 func _spacer(h: int) -> Control:

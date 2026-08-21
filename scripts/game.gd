@@ -13,6 +13,23 @@ extends Node2D
 
 const SECONDS_PER_COIN := 1.5
 
+# --- Clubcard -----------------------------------------------------------------
+#   Clubcard pickups and redeemed coupons pay out in SECONDS, credited straight
+#   off the final score, so they compete directly with the clock for the
+#   player's attention - a 5s coupon is worth a detour of up to 5s, and working
+#   out whether it is comes down to routing.
+#
+#   Points are the meta-layer on top: finish under the level's par and the
+#   seconds you saved bank as Clubcard points, which accumulate across runs.
+const CLUBCARD_SECONDS      := 5.0    # a Clubcard pickup, straight off the clock
+const COUPON_SECONDS        := 5.0    # a coupon redeemed in the right order
+const CLUBCARD_PAR_DEFAULT  := 90.0   # fallback if a level sets no "par"
+const CLUBCARD_PER_SECOND   := 10     # points banked per second under par
+
+# --- shopping list panel ------------------------------------------------------
+const LIST_W  := 196.0   # narrow on purpose: it overlays the playfield
+const ICON_PX := 22.0    # list icons, unrelated to the sprites' native size
+
 enum State { READY, PLAYING, FINISHED }
 
 var state: int = State.READY
@@ -22,6 +39,11 @@ var level: Dictionary = {}
 var elapsed := 0.0
 var coins := 0
 var hits := 0
+var time_credit := 0.0        # seconds earned from Clubcards and redeemed coupons
+var coupons: Array = []
+var coupons_cut: Dictionary = {}   # item id -> seconds owed when you grab it
+var picked: Array = []        # {label, coins} in collection order, for the receipt
+var savings: Array = []       # {label, seconds} for every time credit earned
 var list_ids: Array = []
 var order_mode := "fixed"     # "fixed" | "shuffle" | "any"
 var got: Dictionary = {}      # id -> true, used by the "any" order mode
@@ -47,6 +69,7 @@ var lbl_level: Label
 var lbl_time: Label
 var lbl_coins: Label
 var lbl_score: Label
+var lbl_club: Label
 var lbl_hint: Label
 var _flash_text := ""
 var _flash_t := 0.0
@@ -55,7 +78,7 @@ var list_box: VBoxContainer
 # End-of-run panel
 var end_panel: PanelContainer
 var end_title: Label
-var end_break: Label
+var receipt: Receipt
 var name_edit: LineEdit
 var board_box: VBoxContainer
 var btn_next: Button
@@ -113,6 +136,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if event.keycode == KEY_R:
 			_load_level(level_index)
+			return
+		# a receipt you have already read is just a wait: any other key slams
+		# the rest of it out at once
+		if state == State.FINISHED and receipt != null and receipt.is_printing():
+			receipt.finish_printing()
 
 
 # ===========================================================================
@@ -197,6 +225,22 @@ func _load_level(index: int) -> void:
 		pu.body_entered.connect(_on_powerup_taken.bind(pu))
 		world.add_child(pu)
 
+	# --- coupons. Cut one BEFORE grabbing its product and the product pays a
+	#     time credit; grab the product first and the coupon is dead paper.
+	coupons.clear()
+	coupons_cut.clear()
+	for cd in level.get("coupons", []):
+		var cp := Coupon.new()
+		cp.item_id = str(cd["item"])
+		cp.seconds = float(cd.get("seconds", COUPON_SECONDS))
+		var idef := _item_def(cp.item_id)
+		cp.item_label = str(idef.get("label", cp.item_id))
+		cp.tex = Sprites.region_of(str(idef.get("sheet", "")), int(idef.get("sprite", -1)))
+		cp.position = Vector2(_col_x(int(cd["col"])), _board_y(int(cd["shelf"])))
+		cp.body_entered.connect(_on_coupon_taken.bind(cp))
+		world.add_child(cp)
+		coupons.append(cp)
+
 	# --- freezer doors (visual only, drawn over everything in the aisle)
 	var doors: Array = level.get("doors", [])
 	if not doors.is_empty():
@@ -260,6 +304,9 @@ func _load_level(index: int) -> void:
 	elapsed = 0.0
 	coins = 0
 	hits = 0
+	time_credit = 0.0
+	picked.clear()
+	savings.clear()
 	state = State.READY
 
 	end_panel.visible = false
@@ -285,6 +332,8 @@ func _scatter(defs: Array, lvl: Dictionary, gaps: Array) -> void:
 		blocked[Vector2i(int(h["col"]), int(h["shelf"]))] = true
 	for p in lvl.get("powerups", []):
 		blocked[Vector2i(int(p["col"]), int(p["shelf"]))] = true
+	for cp in lvl.get("coupons", []):
+		blocked[Vector2i(int(cp["col"]), int(cp["shelf"]))] = true
 
 	var free: Array = []
 	for sh in range(shelves):
@@ -425,6 +474,16 @@ func _on_item_touched(body: Node, it: ShelfItem) -> void:
 	it.visible = false
 	it.set_deferred("monitoring", false)
 	coins += it.coins
+	picked.append({"label": it.label, "coins": it.coins})
+
+	# a coupon cut earlier for this product pays out now
+	if coupons_cut.has(it.id):
+		var bonus := float(coupons_cut[it.id])
+		time_credit += bonus
+		coupons_cut.erase(it.id)
+		savings.append({"label": "Coupon " + it.label, "seconds": bonus})
+		_flash("Coupon redeemed!  %s  -%.0fs" % [it.label, bonus])
+
 	list_pos += 1
 	_refresh_targets()
 	_rebuild_list_rows()
@@ -447,6 +506,10 @@ func _on_powerup_taken(body: Node2D, pu: PowerUp) -> void:
 		"coins":
 			coins += 3
 			_flash(pu.label + "  +3")
+		"clubcard":
+			time_credit += CLUBCARD_SECONDS
+			savings.append({"label": pu.label, "seconds": CLUBCARD_SECONDS})
+			_flash("%s  -%.0fs" % [pu.label, CLUBCARD_SECONDS])
 
 
 func _on_hazard_touched(body: Node, hz: Hazard) -> void:
@@ -456,6 +519,9 @@ func _on_hazard_touched(body: Node, hz: Hazard) -> void:
 		return
 
 	match hz.effect():
+		"tumble":
+			player.apply_tumble(hz.global_position.x)
+			_flash("Over you go!")
 		"stun":
 			player.apply_stun(1.0, false)
 			_flash("Slipped!")
@@ -467,7 +533,34 @@ func _on_hazard_touched(body: Node, hz: Hazard) -> void:
 			_flash("Ice!")
 		_:
 			player.apply_slow(hz.global_position.x)
+
+	# Boot it off the shelf. You have paid for this hazard once; it must not be
+	# able to catch you again while you are lying there stunned next to it.
+	hz.knock_away(player.global_position.x)
 	hits += 1
+
+
+## Cutting a coupon only pays if its product is still on the shelf. Touching one
+## after you already grabbed the product picks it up but credits nothing - the
+## order is the mechanic, so the wasted trip has to actually cost you.
+func _on_coupon_taken(body: Node, cp: Coupon) -> void:
+	if state != State.PLAYING or cp.taken or not (body is Player):
+		return
+
+	var already := false
+	for it in items:
+		if it.id == cp.item_id and it.collected:
+			already = true
+			break
+
+	cp.collect(already)
+	if already:
+		_flash("%s already in the trolley - coupon wasted" % cp.item_label)
+		return
+
+	coupons_cut[cp.item_id] = cp.seconds
+	_flash("Coupon cut!  %s now worth -%.0fs" % [cp.item_label, cp.seconds])
+	_rebuild_list_rows()
 
 
 func _refresh_targets() -> void:
@@ -484,7 +577,23 @@ func _refresh_targets() -> void:
 
 
 func final_score() -> float:
-	return elapsed - float(coins) * SECONDS_PER_COIN
+	return elapsed - float(coins) * SECONDS_PER_COIN - time_credit
+
+
+## Clubcard points for the run so far: the seconds you are under this level's
+## par, banked at CLUBCARD_PER_SECOND each. Ticks down live in the HUD as the
+## clock runs, which is what makes the par time feel like a chase.
+func clubcard_points() -> int:
+	var par := float(level.get("par", CLUBCARD_PAR_DEFAULT))
+	return maxi(0, int(round((par - final_score()) * float(CLUBCARD_PER_SECOND))))
+
+
+## The level's definition for one item id, or {} if there is no such item.
+func _item_def(id: String) -> Dictionary:
+	for d in level.get("items", []):
+		if str(d.get("id", "")) == id:
+			return d
+	return {}
 
 
 func _finish() -> void:
@@ -493,14 +602,69 @@ func _finish() -> void:
 		player.set_physics_process(false)
 
 	end_title.text = "%s  -  list complete" % str(level["name"])
-	end_break.text = "Time %.1fs      Hazards hit %d      Coins %d (-%.1fs)\nFINAL SCORE   %.1f" % [
-		elapsed, hits, coins, float(coins) * SECONDS_PER_COIN, final_score()
-	]
+
+	# bank the run's points once, here - _finish only ever runs on completion
+	var earned := clubcard_points()
+	var lifetime := Clubcard.add(earned)
+	_print_receipt(earned, lifetime)
+
 	name_edit.text = ""
 	btn_next.disabled = level_index >= LevelData.levels().size() - 1
 	end_panel.visible = true
 	_refresh_board(Leaderboard.for_level(str(level["name"])))
 	name_edit.grab_focus()
+
+
+## Fills the till receipt with the run and starts it printing. Money-ish
+## columns on the right, everything that cost or saved time itemised, so the
+## final score is something you can read your way down to rather than a number
+## that just appears.
+func _print_receipt(earned: int, lifetime: int) -> void:
+	if receipt == null:
+		return
+	var blue := Color(0.10, 0.35, 0.68)
+
+	receipt.rows.clear()
+	receipt.add_centred("TROLLEY DASH", 21)
+	receipt.add_centred(str(level["name"]), 12, Receipt.FAINT)
+	receipt.add_gap(6.0)
+	receipt.add_rule()
+
+	for p in picked:
+		var coin_n := int(p["coins"])
+		receipt.add_line(str(p["label"]), "%d %s" % [coin_n, "coin" if coin_n == 1 else "coins"])
+	if picked.is_empty():
+		receipt.add_line("(nothing scanned)", "", 13, Receipt.FAINT)
+
+	receipt.add_rule()
+	receipt.add_line("ITEMS", str(picked.size()))
+	receipt.add_line("COINS", "%d  (-%.1fs)" % [coins, float(coins) * SECONDS_PER_COIN])
+	receipt.add_line("HAZARDS HIT", str(hits))
+
+	if not savings.is_empty():
+		receipt.add_rule()
+		receipt.add_line("SAVINGS", "", 13, blue)
+		for s in savings:
+			receipt.add_line("  " + str(s["label"]), "-%.1fs" % float(s["seconds"]), 12, blue)
+
+	receipt.add_rule()
+	receipt.add_line("TIME", "%.1fs" % elapsed)
+	receipt.add_line("TOTAL SCORE", "%.1f" % final_score(), 17)
+	receipt.add_rule()
+
+	if earned > 0:
+		receipt.add_line("CLUBCARD POINTS", "+%d" % earned, 15, blue)
+	else:
+		var par := float(level.get("par", CLUBCARD_PAR_DEFAULT))
+		receipt.add_line("CLUBCARD POINTS", "0", 15, Receipt.FAINT)
+		receipt.add_line("  beat %.0fs to score" % par, "", 11, Receipt.FAINT)
+	receipt.add_line("LIFETIME BALANCE", str(lifetime), 12, Receipt.FAINT)
+
+	receipt.add_gap(8.0)
+	receipt.add_barcode(int(absf(final_score()) * 100.0) + 7919)
+	receipt.add_gap(4.0)
+	receipt.add_centred("THANK YOU FOR SHOPPING", 11, Receipt.FAINT)
+	receipt.build()
 
 
 # ===========================================================================
@@ -548,6 +712,18 @@ func _panel_style() -> StyleBoxFlat:
 	return sb
 
 
+## Lighter and tighter than _panel_style: this one overlays live gameplay, so
+## it trades some contrast for being able to see the shelf underneath it.
+func _list_panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.07, 0.10, 0.62)
+	sb.border_color = Color(0.99, 0.79, 0.16, 0.55)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.set_content_margin_all(9)
+	return sb
+
+
 func _build_hud() -> void:
 	hud = CanvasLayer.new()
 	add_child(hud)
@@ -568,17 +744,21 @@ func _build_hud() -> void:
 	lbl_time = _mk_label("", 30, Color(1, 1, 1))
 	lbl_coins = _mk_label("", 17, Color(0.99, 0.79, 0.16))
 	lbl_score = _mk_label("", 20, Color(0.55, 0.90, 0.65))
+	lbl_club = _mk_label("", 16, Color(0.45, 0.72, 1.00))
 	left.add_child(lbl_level)
 	left.add_child(lbl_time)
 	left.add_child(lbl_coins)
 	left.add_child(lbl_score)
+	left.add_child(lbl_club)
 
-	# ---- top-right shopping list
+	# ---- top-right shopping list. Kept narrow and semi-transparent: it sits
+	#      over the playfield, so it has to be readable without hiding a shelf.
 	var right := PanelContainer.new()
-	right.add_theme_stylebox_override("panel", _panel_style())
+	right.add_theme_stylebox_override("panel", _list_panel_style())
 	right.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	right.position = Vector2(-250, 14)
-	right.custom_minimum_size = Vector2(228, 0)
+	right.position = Vector2(-(LIST_W + 14.0), 14)
+	right.custom_minimum_size = Vector2(LIST_W, 0)
+	right.size = Vector2(LIST_W, 0)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(right)
 
@@ -614,8 +794,8 @@ func _build_end_panel(root: Control) -> void:
 		pstyle = _panel_style()
 	end_panel.add_theme_stylebox_override("panel", pstyle)
 	end_panel.set_anchors_preset(Control.PRESET_CENTER)
-	end_panel.position = Vector2(-250, -230)
-	end_panel.custom_minimum_size = Vector2(500, 0)
+	end_panel.position = Vector2(-410, -300)
+	end_panel.custom_minimum_size = Vector2(820, 0)
 	end_panel.visible = false
 	root.add_child(end_panel)
 
@@ -627,18 +807,36 @@ func _build_end_panel(root: Control) -> void:
 	end_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	v.add_child(end_title)
 
-	end_break = _mk_label("", 16, Color(1, 1, 1))
-	end_break.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(end_break)
+	# receipt on the left, name entry + leaderboard on the right. Side by side
+	# because stacked they overflow 648px of screen once a level's item list
+	# gets long.
+	var main := HBoxContainer.new()
+	main.add_theme_constant_override("separation", 18)
+	v.add_child(main)
+
+	# Tall enough that a normal six-item receipt prints without scrolling; the
+	# scroller is there for All-Store Pick, whose ten-item list overflows it.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(Receipt.W + 18.0, 468.0)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	main.add_child(scroll)
+
+	receipt = Receipt.new()
+	scroll.add_child(receipt)
+
+	var rightcol := VBoxContainer.new()
+	rightcol.add_theme_constant_override("separation", 10)
+	rightcol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main.add_child(rightcol)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
-	v.add_child(row)
+	rightcol.add_child(row)
 
 	name_edit = LineEdit.new()
 	name_edit.placeholder_text = "Your name"
 	name_edit.max_length = 14
-	name_edit.custom_minimum_size = Vector2(240, 0)
+	name_edit.custom_minimum_size = Vector2(200, 0)
 	row.add_child(name_edit)
 
 	var btn_save := Button.new()
@@ -649,11 +847,11 @@ func _build_end_panel(root: Control) -> void:
 
 	var sep := _mk_label("Best times - this aisle", 14, Color(0.75, 0.80, 0.88))
 	sep.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	v.add_child(sep)
+	rightcol.add_child(sep)
 
 	board_box = VBoxContainer.new()
 	board_box.add_theme_constant_override("separation", 2)
-	v.add_child(board_box)
+	rightcol.add_child(board_box)
 
 	var row2 := HBoxContainer.new()
 	row2.add_theme_constant_override("separation", 8)
@@ -705,8 +903,8 @@ func _rebuild_list_rows() -> void:
 		list_box.remove_child(c)
 		c.queue_free()
 
-	var head_txt := "SHOPPING LIST" if order_mode == "any" else "SHOPPING LIST  (in order)"
-	list_box.add_child(_mk_label(head_txt, 14, Color(0.99, 0.79, 0.16)))
+	var head_txt := "SHOPPING LIST" if order_mode == "any" else "SHOPPING LIST (in order)"
+	list_box.add_child(_mk_label(head_txt, 12, Color(0.99, 0.79, 0.16)))
 
 	var defs: Dictionary = {}
 	for d in level["items"]:
@@ -716,6 +914,9 @@ func _rebuild_list_rows() -> void:
 		var id := str(list_ids[i])
 		var d: Dictionary = defs.get(id, {})
 		var name_txt: String = str(d.get("label", id))
+		# a coupon already cut for this product advertises what it will pay
+		if coupons_cut.has(id):
+			name_txt += "  -%ds" % int(float(coupons_cut[id]))
 
 		var done := got.has(id) if order_mode == "any" else i < list_pos
 		var is_next := (not done) and order_mode != "any" and i == list_pos
@@ -736,12 +937,16 @@ func _list_row(d: Dictionary, name_txt: String, done: bool, is_next: bool,
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 7)
 
-	var marker := _mk_label(">" if is_next else " ", 15, tint)
-	marker.custom_minimum_size = Vector2(12.0, 0.0)
+	var marker := _mk_label(">" if is_next else " ", 13, tint)
+	marker.custom_minimum_size = Vector2(10.0, 0.0)
 	row.add_child(marker)
 
 	var icon := TextureRect.new()
-	icon.custom_minimum_size = Vector2(26.0, 26.0)
+	# EXPAND_IGNORE_SIZE is load-bearing: without it a TextureRect's minimum
+	# size is the texture's own size, so the 96x96 grocery sprites forced every
+	# list row 96px tall and the panel swallowed a third of the aisle.
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.custom_minimum_size = Vector2(ICON_PX, ICON_PX)
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	icon.modulate = tint
@@ -754,9 +959,13 @@ func _list_row(d: Dictionary, name_txt: String, done: bool, is_next: bool,
 		icon.texture = _chip(str(d.get("type", "box")))
 	row.add_child(icon)
 
-	var lbl := _mk_label(name_txt, 15, tint)
+	var lbl := _mk_label(name_txt, 13, tint)
 	if done:
 		lbl.text = name_txt + "  ok"
+	# long names ellipsise rather than shoving the panel wider over the aisle
+	lbl.clip_text = true
+	lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(lbl)
 	return row
 
@@ -793,6 +1002,10 @@ func _update_hud() -> void:
 	lbl_time.text = "%.1fs" % elapsed
 	lbl_coins.text = "Coins %d   (-%.1fs)   Hits %d" % [coins, float(coins) * SECONDS_PER_COIN, hits]
 	lbl_score.text = "Score %.1f" % final_score()
+	if time_credit > 0.0:
+		lbl_club.text = "Clubcard %d pts   (-%.0fs banked)" % [clubcard_points(), time_credit]
+	else:
+		lbl_club.text = "Clubcard %d pts" % clubcard_points()
 
 	if is_instance_valid(player) and player.slow > 0.0:
 		lbl_score.text += "   ** SLOWED **"
@@ -803,8 +1016,14 @@ func _update_hud() -> void:
 	else:
 		lbl_score.add_theme_color_override("font_color", Color(0.55, 0.90, 0.65))
 
+	# The start hint hides itself once the run begins, so a flash has to switch
+	# the label back on - otherwise pickup messages were written to a hidden
+	# label and never appeared at all.
 	if _flash_t > 0.0:
 		lbl_hint.text = _flash_text
+		lbl_hint.visible = true
+	elif state != State.READY:
+		lbl_hint.visible = false
 
 
 # ===========================================================================
@@ -849,15 +1068,22 @@ func _draw() -> void:
 		var gx := float(c) * LevelData.TILE
 		draw_line(Vector2(gx, roof), Vector2(gx, LevelData.FLOOR_Y), grid, 1.0)
 
-	# --- racking uprights, drawn behind everything on the shelves
+	# --- racking uprights, drawn behind everything on the shelves.
+	#     A shelf gap is SHELF_SPACING tall (3 tiles); the post art is ONE tile,
+	#     so it has to be stacked to fill the gap. Drawing a single tile per gap
+	#     left the uprights floating in mid-air with the shelf unconnected above
+	#     and below them.
 	if _sheet != null:
+		var per_gap := int(LevelData.SHELF_SPACING / LevelData.TILE)
 		var c := 0
 		while c < level_cols:
 			var px := float(c) * LevelData.TILE
 			for b3 in range(shelves):
-				var oy := _board_y(b3) - LevelData.SHELF_SPACING + LevelData.TILE
 				var idx := ShelfTheme.POST_BRACE if b3 % 2 == 0 else ShelfTheme.POST_PLAIN
-				_blit(idx, px, oy, 0.55)
+				var gap_bottom := _board_y(b3)
+				for t in range(per_gap):
+					_blit(idx, px, gap_bottom - float(t + 1) * LevelData.TILE, 0.55)
+			# the foot caps the bottom-most tile of the ground-floor upright
 			_blit(ShelfTheme.POST_FOOT, px, _board_y(0) - LevelData.TILE, 0.55)
 			c += ShelfTheme.POST_EVERY
 

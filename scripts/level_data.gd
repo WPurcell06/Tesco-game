@@ -45,6 +45,16 @@ static func sheets() -> Dictionary:
 #
 # doors           frosted freezer panes drawn OVER the aisle, visual only
 # gaps            individual missing board tiles; adjacent ones merge
+#
+# par             target time in seconds. Finish under it and every second
+#                 saved banks Clubcard points (see CLUBCARD_* in game.gd).
+# coupons         {"item": <item id>, "col", "shelf", "seconds"}. Cut one
+#                 BEFORE collecting that item and the item pays "seconds" off
+#                 the clock; collect the item first and the coupon is worthless.
+#                 Place them away from the product they pay for - the detour
+#                 is the mechanic.
+# powerups        "kind" is boost | clean | coins | clubcard, where clubcard
+#                 credits CLUBCARD_SECONDS straight off the final time.
 # ---------------------------------------------------------------------------
 
 static func levels() -> Array:
@@ -55,6 +65,7 @@ static func levels() -> Array:
 			"shelves": 4,
 			"order": "shuffle",
 			"randomise": true,
+			"par": 75.0,
 			"items": [
 				{"id": "apples", "label": "Apples", "coins": 1, "type": "apple", "shelf": 1, "col": 15,
 					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.APPLE_RED},
@@ -100,6 +111,16 @@ static func levels() -> Array:
 					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BROCCOLI_KING},
 				{"id": "pu4", "kind": "coins", "label": "Baked Beans", "shelf": 0, "col": 20,
 					"sheet": GroceryTheme.SHEET, "sprite": GroceryTheme.BEANS_CAN},
+				{"id": "pu5", "kind": "clubcard", "label": "Clubcard", "shelf": 3, "col": 8},
+				{"id": "pu6", "kind": "clubcard", "label": "Clubcard", "shelf": 0, "col": 15},
+			],
+			# Each coupon is worth its seconds ONLY if cut before its product is
+			# collected, so these sit deliberately away from the product they
+			# pay for - the detour has to be a real decision, not a freebie.
+			"coupons": [
+				{"item": "carrots", "shelf": 0, "col": 24, "seconds": 5.0},
+				{"item": "tomatoes", "shelf": 1, "col": 31, "seconds": 5.0},
+				{"item": "apples", "shelf": 2, "col": 6, "seconds": 5.0},
 			],
 			"gaps": [
 				{"shelf": 2, "col": 19},
@@ -115,6 +136,7 @@ static func levels() -> Array:
 			"shelves": 5,
 			"order": "shuffle",
 			"randomise": true,
+			"par": 85.0,
 			"items": [
 				{"id": "chocbar", "label": "Choc Bar", "coins": 1, "type": "chocolate", "shelf": 0, "col": 7},
 				{"id": "gummies", "label": "Gummy Bears", "coins": 2, "type": "gummy", "shelf": 1, "col": 18},
@@ -164,6 +186,7 @@ static func levels() -> Array:
 			"shelves": 6,
 			"order": "shuffle",
 			"randomise": true,
+			"par": 95.0,
 			"items": [
 				{"id": "chicken", "label": "Chicken", "coins": 2, "type": "poultry", "shelf": 0, "col": 8},
 				{"id": "turkey", "label": "Turkey Crown", "coins": 3, "type": "poultry", "shelf": 1, "col": 21},
@@ -259,6 +282,7 @@ static func levels() -> Array:
 			"shelves": 5,
 			"order": "shuffle",
 			"randomise": true,
+			"par": 85.0,
 			"items": [
 				{"id": "hairbrush", "label": "Hairbrush", "coins": 1, "type": "hairbrush", "shelf": 0, "col": 6},
 				{"id": "comb", "label": "Comb", "coins": 1, "type": "comb", "shelf": 1, "col": 17},
@@ -308,6 +332,7 @@ static func levels() -> Array:
 			"shelves": 6,
 			"order": "shuffle",
 			"randomise": true,
+			"par": 240.0,
 			"pick": 10,
 			"sections": [
 				{"col": 0, "name": "Produce"},

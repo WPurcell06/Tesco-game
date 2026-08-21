@@ -18,9 +18,20 @@ var kind := "spill"
 var box := Vector2(41.4, 39.6)
 
 const EFFECTS := {
-	"peel": "stun", "soap": "bubble", "ice": "slip",
-	"spill": "slow", "crate": "slow", "trolley": "slow", "pallet": "slow", "box": "slow",
+	"peel": "tumble", "crate": "tumble",
+	"soap": "bubble", "ice": "slip",
+	"spill": "slow", "trolley": "slow", "pallet": "slow", "box": "slow",
 }
+
+# --- knocked-away animation ---------------------------------------------------
+# Clipping a hazard boots it off the shelf rather than leaving it sitting there.
+# That matters for fairness as much as comedy: a hazard you have already paid
+# for cannot hit you a second time on the way back.
+const FLY_TIME    := 0.9      # seconds from clipped to gone
+const FLY_SPEED_X := 380.0
+const FLY_SPEED_Y := -520.0   # up and over the shopper's shoulder
+const FLY_GRAVITY := 1400.0
+const FLY_SPIN    := 12.0     # radians/sec, fast enough to read as tumbling
 
 # Flat hazards sit low and are read as floor surfaces; tall ones are solid
 # objects you clearly have to hop.
@@ -47,10 +58,27 @@ const TINTS := {
 }
 
 var _t := 0.0
+var _flying := false
+var _fly_t := 0.0
+var _fly_v := Vector2.ZERO
 
 
 func effect() -> String:
 	return str(EFFECTS.get(kind, "slow"))
+
+
+## Boots this hazard off the shelf, away from whatever hit it. Collision stops
+## immediately; the node frees itself once it has spun off screen.
+func knock_away(from_x: float) -> void:
+	if _flying:
+		return
+	_flying = true
+	_fly_t = 0.0
+	set_deferred("monitoring", false)
+	var away := signf(global_position.x - from_x)
+	if away == 0.0:
+		away = 1.0
+	_fly_v = Vector2(away * FLY_SPEED_X, FLY_SPEED_Y)
 
 
 static func box_for(k: String) -> Vector2:
@@ -70,6 +98,18 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _flying:
+		_fly_t += delta
+		_fly_v.y += FLY_GRAVITY * delta
+		position += _fly_v * delta
+		rotation += FLY_SPIN * delta * signf(_fly_v.x)
+		# fades out on the way, so it never just pops off mid-arc
+		modulate.a = clampf(1.0 - _fly_t / FLY_TIME, 0.0, 1.0)
+		queue_redraw()
+		if _fly_t >= FLY_TIME:
+			queue_free()
+		return
+
 	if kind == "ice" or kind == "soap":
 		_t += delta
 		queue_redraw()

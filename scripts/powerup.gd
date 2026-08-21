@@ -7,7 +7,7 @@ var tex: Texture2D = null   # set by Game when the level assigns a sprite
 # one costs you a detour, so it should only be worth it if the effect pays for
 # the time. Effects live in Game._on_powerup_taken.
 
-var kind := "boost"       # "boost" | "clean" | "coins"
+var kind := "boost"       # "boost" | "clean" | "coins" | "clubcard"
 var label := "Power-up"
 var taken := false
 
@@ -17,6 +17,7 @@ const COLOURS := {
 	"boost": Color(0.42, 0.86, 0.95),
 	"clean": Color(0.62, 0.90, 0.55),
 	"coins": Color(0.99, 0.79, 0.16),
+	"clubcard": Color(0.0, 0.42, 0.80),
 }
 
 
@@ -53,6 +54,20 @@ func _draw() -> void:
 
 	# soft halo so it reads as a bonus rather than a hazard
 	draw_circle(c, 22.0, Color(col.r, col.g, col.b, 0.18))
+
+	# a Clubcard is drawn as an actual card rather than the generic diamond -
+	# it is the one pickup that pays out in seconds, so it earns its own look
+	if kind == "clubcard":
+		var cw := 42.0
+		var ch := 27.0
+		var card := Rect2(c.x - cw * 0.5, c.y - ch * 0.5, cw, ch)
+		draw_rect(card, Color(0.0, 0.22, 0.48), true)                      # Tesco blue
+		draw_rect(Rect2(card.position.x, card.position.y + ch * 0.34,
+			cw, ch * 0.24), Color(0.902, 0.114, 0.145), true)              # red stripe
+		draw_rect(Rect2(card.position.x + 4.0, card.position.y + 4.0,
+			cw * 0.30, 5.0), Color(1, 1, 1, 0.88), true)                   # chip
+		draw_rect(card, Color(0.06, 0.08, 0.12), false, 2.0)
+		return
 
 	# diamond body
 	var pts := PackedVector2Array([

@@ -53,6 +53,19 @@ const HIT_GRACE       := 0.5    # stops one hazard registering twice
 const STUN_FRICTION   := 810.0   # banana peel: you skid to a stop
 const BUBBLE_FRICTION := 2340.0  # soap bubble: you stop dead and float
 
+# --- tumble: clip a solid obstacle and you go over, sliding on your back ---
+# A tumble is a variant of stun, not its own control path: same "no input"
+# rule, different friction and a sprite that lies down. Two seconds is a long
+# time to lose, which is why the hazard that caused it is knocked off the
+# shelf on impact - you pay once and the obstacle is gone.
+const TUMBLE_TIME      := 2.0
+const TUMBLE_FRICTION  := 620.0   # lower than a skid: you slide a good way
+const TUMBLE_POP_Y     := -260.0  # small hop, so it reads as knocked off your feet
+const TUMBLE_PUSH_X    := 180.0
+const TUMBLE_ANGLE     := 1.466   # 84 degrees in radians - flat out, not face down
+const TUMBLE_TIP_TIME  := 0.18    # how fast you go over
+const TUMBLE_RISE_TIME := 0.32    # how long scrambling back upright takes
+
 # --- slip: ice is FASTER but barely steerable, which is the whole problem ---
 const SLIP_SPEED_MULT := 1.30
 const SLIP_ACCEL_MULT := 0.22
@@ -71,6 +84,7 @@ var boost := 0.0         # seconds of speed boost remaining
 var stun := 0.0          # seconds of no control remaining
 var slip := 0.0          # seconds of ice physics remaining
 var bubbled := false     # cosmetic + friction variant of stun
+var tumbling := false    # ditto: knocked off your feet, drawn lying down
 var facing := 1.0
 var _anim := 0.0
 var _tex: Texture2D = null
@@ -118,6 +132,7 @@ func _physics_process(delta: float) -> void:
 		stun -= delta
 		if stun <= 0.0:
 			bubbled = false
+			tumbling = false
 	if _grace > 0.0:
 		_grace -= delta
 
@@ -179,9 +194,15 @@ func _physics_process(delta: float) -> void:
 
 	var dir := Input.get_axis("ui_left", "ui_right")
 	if stun > 0.0:
-		# controls are gone; a bubble pins you, a peel lets you skid
+		# controls are gone; a bubble pins you, a tumble slides you along on
+		# your back, a peel lets you skid
 		dir = 0.0
-		friction = BUBBLE_FRICTION if bubbled else STUN_FRICTION
+		if bubbled:
+			friction = BUBBLE_FRICTION
+		elif tumbling:
+			friction = TUMBLE_FRICTION
+		else:
+			friction = STUN_FRICTION
 
 	if absf(dir) > 0.01:
 		var target := dir * SPEED * speed_mult
@@ -245,6 +266,20 @@ func apply_slip(seconds: float) -> void:
 	slip = maxf(slip, seconds)
 
 
+## Knocked clean off your feet by a solid obstacle: no control for TUMBLE_TIME,
+## popped up and pushed away from whatever you clipped, drawn lying down.
+func apply_tumble(from_x: float) -> void:
+	_grace = HIT_GRACE
+	stun = maxf(stun, TUMBLE_TIME)
+	tumbling = true
+	bubbled = false
+	var away := signf(global_position.x - from_x)
+	if away == 0.0:
+		away = -1.0
+	velocity.x = away * TUMBLE_PUSH_X
+	velocity.y = TUMBLE_POP_Y
+
+
 ## Applied when the player falls through a hole in the aisle floor and gets
 ## put back on their last safe footing. Same cost as clipping a hazard.
 func stumble() -> void:
@@ -261,7 +296,16 @@ func clear_slow() -> void:
 
 
 func _draw() -> void:
+	# The trolley goes over with the shopper, so it is rotated by the same
+	# angle - but NOT mirrored, because _draw_trolley already handles which
+	# side of the body it sits on itself.
+	var ang := _tumble_angle()
+	if ang != 0.0:
+		var pv := Vector2(0.0, -BODY_H * 0.5)
+		draw_set_transform(pv - pv.rotated(ang), ang, Vector2.ONE)
 	_draw_trolley()
+	if ang != 0.0:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	var tint := Color(1, 1, 1)
 	if stun > 0.0:
@@ -298,11 +342,33 @@ func _draw() -> void:
 	var dest := Rect2(-body_mid, -float(BODY_BOTTOM * ART_SCALE), cell, cell)
 	var src := Rect2(0.0, float(frame * FRAME), float(FRAME), float(FRAME))
 
-	if facing < 0.0:
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2(-1.0, 1.0))
+	# One transform covers both the facing flip and the tumble. The pivot is
+	# the shopper's MIDDLE, not their feet: rotating about the feet reads as
+	# the sprite spinning on the spot, about the middle it reads as falling.
+	var flip := Vector2(-1.0, 1.0) if facing < 0.0 else Vector2.ONE
+	var posed := ang != 0.0 or facing < 0.0
+	if posed:
+		var pivot := Vector2(0.0, -BODY_H * 0.5)
+		draw_set_transform(pivot - pivot.rotated(ang), ang, flip)
 	draw_texture_rect_region(_tex, dest, src, tint)
-	if facing < 0.0:
+	if posed:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+
+## How far over the shopper has toppled, 0 when upright. Tips over fast, holds
+## there, then scrambles back up just before control returns - so the sprite is
+## always standing again by the time the player can move.
+##
+## Multiplied by facing so they always go over FORWARDS. The sprite flip is a
+## negative x scale, which mirrors the rotation too, and the two cancel out.
+func _tumble_angle() -> float:
+	if not tumbling or stun <= 0.0:
+		return 0.0
+	var elapsed := TUMBLE_TIME - stun
+	var down := clampf(elapsed / TUMBLE_TIP_TIME, 0.0, 1.0)
+	var up := clampf(stun / TUMBLE_RISE_TIME, 0.0, 1.0)
+	var facing_sign := facing if facing != 0.0 else 1.0
+	return TUMBLE_ANGLE * minf(down, up) * facing_sign
 
 
 ## A wireframe shopping trolley, pushed ahead of the shopper in whichever
