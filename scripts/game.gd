@@ -98,7 +98,9 @@ var btn_next: Button
 func _ready() -> void:
 	level_index = Session.level_index
 	_build_hud()
-	_load_level(0)
+	# the aisle the player actually chose on the home screen - this used to be
+	# a hardcoded 0, so every sign on the menu opened Produce Pursuit
+	_load_level(level_index)
 	# after the build on purpose: if audio ever fails, the aisle is already up
 	Sfx.music("music_level")
 

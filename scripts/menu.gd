@@ -80,8 +80,37 @@ var _rail_y := RAIL_Y      # recomputed in _build from the title's height
 func _ready() -> void:
 	_levels = LevelData.levels()
 	_build()
+	_self_check()
 	# after _build on purpose: if audio ever fails, the menu is already up
 	Sfx.music("music_menu")
+
+
+## The menu can look perfectly healthy while the thing it launches is broken -
+## a script that fails to compile takes its whole scene with it, and
+## change_scene_to_file just returns an error nobody sees. So check the aisle
+## scene loads UP FRONT and put any fault on screen rather than making the
+## player discover it by clicking a button that does nothing.
+func _self_check() -> void:
+	if _levels.is_empty():
+		_show_fault("No levels loaded - LevelData.levels() returned nothing.")
+		return
+	if load("res://game.tscn") == null:
+		_show_fault("game.tscn will not load.\nA script it depends on failed to compile - see the Output panel.")
+
+
+func _show_fault(msg: String) -> void:
+	var font := Session.ui_font()
+	var box := PanelContainer.new()
+	box.add_theme_stylebox_override("panel", _flat(Color(0.55, 0.06, 0.08, 0.96), DARK))
+	box.position = Vector2(60.0, VIEW.y - 190.0)
+	box.custom_minimum_size = Vector2(VIEW.x - 120.0, 0.0)
+	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if _layer != null:
+		_layer.add_child(box)
+	var l := _label(msg, 15, Color(1, 1, 1), font)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(l)
+	push_error(msg)
 
 
 # ===========================================================================
@@ -170,6 +199,7 @@ func _build_title(root: Control, font: FontFile) -> float:
 		shadow.color = DARK
 		shadow.position = Vector2(px, LOGO_TOP + SHADOW_DROP)
 		shadow.size = Vector2(pw, ph)
+		shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root.add_child(shadow)
 
 		var plate := PanelContainer.new()
@@ -244,7 +274,10 @@ func _draw_trolley_icon(who: Control) -> void:
 ## Ordered runs follow the list top to bottom with a chevron pointing at the
 ## next item; any-order runs let you grab things however you like.
 func _build_mode_row(root: Control, font: FontFile, at_y: float) -> void:
+	# spans the full width to centre its contents, so it must not be a click
+	# target itself - only the two buttons inside it are
 	var wrap := HBoxContainer.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wrap.add_theme_constant_override("separation", 10)
 	wrap.alignment = BoxContainer.ALIGNMENT_CENTER
 	wrap.position = Vector2(0.0, at_y)
@@ -302,17 +335,27 @@ func _hanging_sign(index: int, width: float, at: Vector2, font: FontFile,
 	var spec: Dictionary = AISLES[index % AISLES.size()]
 	var stem := STEM_H if with_stem else 0.0
 
+	# The WHOLE sign is the click target, handled here rather than by a
+	# transparent Button laid over the top. An overlay depends on child order,
+	# on the overlay's size surviving add_child, and on nothing decorative
+	# sitting above it - three ways to end up with a sign that looks right and
+	# does nothing. One control with one gui_input has none of those failure
+	# modes, and every decorative child below is explicitly IGNORE so it cannot
+	# swallow the press.
 	var holder := Control.new()
 	holder.position = at
 	holder.custom_minimum_size = Vector2(width, stem + SIGN_H + SHADOW_DROP)
 	holder.size = holder.custom_minimum_size
-	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.mouse_filter = Control.MOUSE_FILTER_STOP
+	holder.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	holder.gui_input.connect(_on_sign_input.bind(index))
 
 	if with_stem:
 		var rod := ColorRect.new()
 		rod.color = DARK
 		rod.position = Vector2(width * 0.5 - 1.5, 0.0)
 		rod.size = Vector2(3.0, STEM_H)
+		rod.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		holder.add_child(rod)
 
 	# hard offset shadow: a second rect behind, no blur, because everything
@@ -321,6 +364,7 @@ func _hanging_sign(index: int, width: float, at: Vector2, font: FontFile,
 	shadow.color = DARK
 	shadow.position = Vector2(0.0, stem + SHADOW_DROP)
 	shadow.size = Vector2(width, SIGN_H)
+	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	holder.add_child(shadow)
 
 	var board := PanelContainer.new()
@@ -375,20 +419,16 @@ func _hanging_sign(index: int, width: float, at: Vector2, font: FontFile,
 	best_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	strip_row.add_child(best_lbl)
 
-	# --- the whole sign is the button. A transparent Button laid over the top
-	#     keeps the visual free to be a normal container stack.
-	var hit := Button.new()
-	hit.flat = true
-	hit.text = ""
-	hit.focus_mode = Control.FOCUS_NONE
-	hit.position = Vector2(0.0, stem)
-	hit.size = Vector2(width, SIGN_H)
-	hit.tooltip_text = name_txt
-	hit.mouse_filter = Control.MOUSE_FILTER_STOP
-	hit.pressed.connect(_play.bind(index))
-	holder.add_child(hit)
-
+	holder.tooltip_text = name_txt
 	return holder
+
+
+## A press anywhere on an aisle sign starts that aisle.
+func _on_sign_input(event: InputEvent, index: int) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			_play(index)
 
 
 ## Lifetime Clubcard balance, sat on the floor strip.
@@ -523,13 +563,19 @@ func _play(index: int) -> void:
 	if _sfx:
 		_sfx.play()
 	Session.level_index = index
-	get_tree().change_scene_to_file("res://game.tscn")
+	# change_scene_to_file returns an error rather than raising: if the game
+	# scene or any script it depends on fails to compile, the call quietly does
+	# nothing and the player is left clicking a dead menu. Say so instead.
+	var err := get_tree().change_scene_to_file("res://game.tscn")
+	if err != OK:
+		_show_fault("Could not open the aisle - game.tscn failed to load (error %d).\nSee the editor Output panel for the script error." % err)
 
 
 func _unhandled_key_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var k := event as InputEventKey
-		if k.keycode >= KEY_1 and k.keycode <= KEY_9:
-			var idx := k.keycode - KEY_1
-			if idx < _levels.size():
-				_play(idx)
+		if k.keycode >= KEY_1 and k.keycode <= KEY_5:
+			# bounded by the fixed five aisles, not by _levels - if the level
+			# list failed to load, the keys should still report the fault
+			# through _play rather than silently doing nothing
+			_play(k.keycode - KEY_1)
